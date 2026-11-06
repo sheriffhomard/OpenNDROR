@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenNDR Web Frontend Application
+Documentation=https://github.com/openndr/openndr
+After=network.target openndr-backend.service
+
+[Service]
+Type=simple
+User=openndr
+Group=openndr
+WorkingDirectory=/opt/openndr/frontend
+Environment=PORT=3000
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

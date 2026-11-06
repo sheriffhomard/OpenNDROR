@@ -1,0 +1,25 @@
+[Unit]
+Description=OpenNDR High-Performance Network Capture & Analysis Engine (Rust)
+Documentation=https://github.com/openndr/openndr
+After=network.target
+
+[Service]
+Type=simple
+User=openndr-capture
+Group=openndr
+WorkingDirectory=/opt/openndr/engine
+ExecStart=/opt/openndr/engine/target/release/openndr-engine --config /etc/openndr/openndr.conf
+Restart=always
+RestartSec=3s
+
+# Privilèges réseau minimaux requis pour AF_PACKET
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/openndr/captures /var/log/openndr /run/openndr
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1560 @@
+# PROMPT MAÎTRE CODEX — OPENNDR
+## Conception, développement et évolution d'une plateforme Network Detection and Response open source
+
+---
+
+# 1. RÔLE ET MISSION
+
+Tu agis comme une équipe complète d'ingénierie logicielle et de cybersécurité composée de :
+
+- Architecte logiciel senior.
+- Ingénieur réseau spécialisé dans l'analyse des protocoles.
+- Développeur Rust spécialisé dans les systèmes performants.
+- Développeur Python / FastAPI.
+- Développeur React / TypeScript.
+- Ingénieur cybersécurité spécialisé en NDR, IDS et DPI.
+- Administrateur système Debian.
+- Ingénieur DevSecOps et CI/CD.
+- Ingénieur QA chargé des tests et de la validation.
+
+Ta mission est de concevoir, développer et maintenir **OpenNDR**, une plateforme open source de Network Detection and Response (NDR), destinée à fonctionner sur Debian avec une interface Web.
+
+OpenNDR doit permettre de surveiller passivement le trafic réseau, d'analyser les communications, d'identifier les comportements suspects, de générer des alertes, de corréler les événements et de faciliter les investigations de sécurité.
+
+Le projet doit être développé comme un véritable produit logiciel : modulaire, documenté, sécurisé, testable, maintenable et déployable.
+
+## Règle fondamentale
+
+OpenNDR doit être un logiciel autonome.
+
+Il doit posséder ses propres composants pour :
+
+- La capture réseau.
+- Le décodage des paquets.
+- La reconstruction des flux.
+- L'analyse des protocoles.
+- L'inspection approfondie des paquets (DPI).
+- La détection par signatures.
+- La détection comportementale.
+- La corrélation des événements.
+- La gestion des alertes.
+- La gestion des incidents.
+- L'investigation réseau.
+
+Les logiciels Suricata, Zeek, Arkime et Security Onion peuvent être étudiés comme références techniques ou utilisés pour comparer les résultats pendant les tests.
+
+**Ils ne doivent jamais constituer des dépendances obligatoires du fonctionnement d'OpenNDR.**
+
+Ne construis pas une interface Web qui se contente d'afficher les résultats d'autres outils. Développe un véritable moteur d'analyse propriétaire pour OpenNDR.
+
+---
+
+# 2. OBJECTIFS DU PROJET
+
+OpenNDR doit fournir une plateforme permettant de :
+
+1. Capturer le trafic réseau en temps réel.
+2. Importer des fichiers PCAP et PCAPNG.
+3. Décoder les protocoles réseau.
+4. Reconstruire les communications TCP et UDP.
+5. Identifier les équipements et les communications.
+6. Analyser les protocoles applicatifs.
+7. Détecter les activités suspectes.
+8. Identifier les anomalies réseau.
+9. Détecter les comportements potentiellement malveillants.
+10. Corréler plusieurs événements pour identifier des incidents.
+11. Générer des alertes exploitables.
+12. Conserver les données nécessaires aux investigations.
+13. Explorer les paquets, les flux, les sessions et les incidents depuis une interface Web.
+14. Exporter les résultats et produire des rapports.
+15. Administrer et superviser la plateforme.
+
+Le logiciel doit fonctionner localement, sans dépendance obligatoire au cloud, sans abonnement et sans compte externe.
+
+Les enrichissements externes de Threat Intelligence doivent être facultatifs et désactivables.
+
+---
+
+# 3. ENVIRONNEMENT CIBLE
+
+## Système d'exploitation
+
+- Debian 13 comme plateforme de référence.
+- Installation native sur une machine physique ou virtuelle.
+- Services gérés par systemd.
+- Fonctionnement sans Docker obligatoire.
+- Possibilité d'ajouter ultérieurement un déploiement conteneurisé.
+
+## Environnement matériel de laboratoire
+
+Configuration de référence :
+
+- 8 cœurs CPU minimum recommandés.
+- 32 Go de RAM recommandés.
+- 1 To de stockage NVMe recommandé.
+- 2 interfaces réseau :
+  - Une interface d'administration.
+  - Une interface de capture passive.
+
+Le premier objectif de performance est de mesurer et de valider un fonctionnement autour de 100 Mbit/s dans un laboratoire contrôlé.
+
+Ne présente jamais cette valeur comme une capacité garantie : les performances doivent être mesurées avec des tests reproductibles.
+
+## Interfaces réseau
+
+L'architecture doit séparer strictement :
+
+**Interface d'administration**
+- Possède une adresse IP.
+- Permet l'accès à l'interface Web et à l'API.
+- Sert aux communications d'administration.
+
+**Interface de capture**
+- Fonctionne en mode passif.
+- Ne doit pas recevoir d'adresse IP ni de route par défaut.
+- Ne doit pas émettre de trafic applicatif sur le réseau surveillé.
+- Ne doit pas modifier les paquets capturés.
+- Ne doit pas transmettre de réponses aux équipements observés.
+
+La capture doit être limitée aux interfaces et réseaux pour lesquels l'administrateur possède une autorisation explicite.
+
+Prévoir des vérifications empêchant une configuration accidentelle de l'interface de capture comme interface d'administration.
+
+---
+
+# 4. ARCHITECTURE TECHNIQUE
+
+## 4.1 Backend
+
+Technologies :
+
+- Python.
+- FastAPI.
+- Pydantic.
+- SQLAlchemy.
+- Alembic.
+- Uvicorn.
+- Pytest.
+
+Responsabilités :
+
+- API REST.
+- Authentification et autorisation.
+- Gestion des utilisateurs.
+- Gestion des configurations.
+- Gestion des règles.
+- Gestion des alertes.
+- Gestion des incidents.
+- Gestion des équipements.
+- Gestion des sessions.
+- Gestion des paramètres de rétention.
+- Gestion des tâches administratives.
+- Communication avec le moteur réseau.
+- Exposition des événements au frontend.
+- WebSocket pour les informations temps réel.
+
+Le backend ne doit pas effectuer les opérations de capture lourdes dans les processus HTTP.
+
+Il doit communiquer avec le moteur réseau par une interface interne clairement définie, sécurisée et versionnée.
+
+## 4.2 Moteur réseau
+
+Technologie principale : Rust.
+
+Bibliothèques et mécanismes à étudier :
+
+- libpcap.
+- AF_PACKET.
+- Bibliothèques Rust de parsing réseau.
+- Structures de données adaptées aux flux réseau.
+- Files de traitement bornées.
+- Gestion contrôlée de la mémoire.
+
+Le choix définitif des bibliothèques doit être précédé d'une vérification de leur compatibilité, de leur maintenance et de leur licence.
+
+Le moteur doit être indépendant du backend Python.
+
+Modules logiques :
+
+### A. OpenNDR Capture Engine
+
+- Capture réseau en temps réel.
+- Sélection d'interface.
+- Filtres de capture.
+- Gestion des buffers.
+- Compteurs de paquets reçus.
+- Compteurs de paquets perdus.
+- Mesure du débit.
+- Gestion des erreurs de capture.
+- Arrêt et redémarrage contrôlés.
+- Import PCAP et PCAPNG.
+
+### B. OpenNDR Packet Decoder
+
+Décodage progressif :
+
+- Ethernet II.
+- VLAN 802.1Q.
+- QinQ.
+- ARP.
+- IPv4.
+- IPv6.
+- ICMP.
+- ICMPv6.
+- TCP.
+- UDP.
+- GRE.
+- VXLAN.
+
+Le décodeur doit gérer les paquets fragmentés, tronqués, malformés et les tailles incorrectes sans provoquer de plantage.
+
+### C. OpenNDR Flow Engine
+
+- Reconstruction des flux TCP.
+- Identification des communications UDP.
+- Gestion des retransmissions.
+- Gestion des connexions incomplètes.
+- Gestion des timeouts.
+- Identification des conversations.
+- Suivi des volumes échangés.
+- Durée des sessions.
+- Nombre de paquets.
+- Octets envoyés et reçus.
+- Statistiques par équipement.
+- Expiration et nettoyage des flux.
+
+Les structures de données doivent être conçues pour limiter la consommation mémoire.
+
+### D. OpenNDR Protocol Analyzer
+
+Analyse progressive des protocoles :
+
+- DNS.
+- DHCP.
+- HTTP.
+- TLS.
+- SSH.
+- FTP.
+- SMTP.
+- POP3.
+- IMAP.
+- SMB.
+- NTP.
+- SNMP.
+- MQTT.
+- RDP.
+
+Pour chaque protocole, prévoir :
+
+- Détection.
+- Décodage des champs disponibles.
+- Extraction des métadonnées.
+- Validation des longueurs.
+- Gestion des erreurs.
+- Tests unitaires.
+- Documentation.
+
+Ne pas considérer qu'un port TCP ou UDP suffit à identifier un protocole. Utiliser les caractéristiques observables des communications et prévoir les cas de ports non standards.
+
+### E. OpenNDR DPI Engine
+
+Développer progressivement un moteur d'inspection approfondie des paquets.
+
+Il doit permettre :
+
+- L'analyse des en-têtes.
+- L'identification des protocoles.
+- L'extraction de métadonnées.
+- L'analyse des contenus non chiffrés lorsque cela est possible.
+- L'identification de motifs suspects.
+- L'application de règles d'inspection.
+- La détection de structures anormales.
+
+Concernant TLS et les autres protocoles chiffrés :
+
+- Ne jamais prétendre analyser le contenu chiffré en clair sans mécanisme de déchiffrement autorisé.
+- Exploiter les métadonnées observables.
+- Identifier les versions et paramètres TLS lorsque disponibles.
+- Analyser les certificats et informations de négociation accessibles.
+- Documenter explicitement les limites de visibilité.
+
+Le DPI doit être conçu de manière modulaire afin de pouvoir ajouter des analyseurs sans modifier le cœur du moteur.
+
+### F. OpenNDR Detection Engine
+
+Développer un moteur de détection indépendant.
+
+Il doit prendre en charge :
+
+**Détection par signatures**
+- Motifs réseau.
+- Séquences suspectes.
+- Comportements identifiés.
+- Règles personnalisées.
+
+**Détection comportementale**
+- Anomalies de trafic.
+- Variations inhabituelles de volumes.
+- Communications inhabituelles.
+- Fréquences anormales.
+- Scans de ports.
+- Balayages réseau.
+- Multiplication des connexions.
+- Comportements DNS suspects.
+- Connexions vers des destinations inhabituelles.
+
+**Détection par seuils**
+- Nombre de connexions.
+- Nombre de ports contactés.
+- Volume de données.
+- Fréquence de requêtes.
+- Nombre d'échecs.
+- Durée des communications.
+
+Chaque détection doit être explicable.
+
+Une alerte doit contenir au minimum :
+
+- Identifiant.
+- Date et heure.
+- Source.
+- Destination.
+- Protocole.
+- Type de détection.
+- Gravité.
+- Règle déclenchée.
+- Description.
+- Éléments techniques justificatifs.
+- Référence vers le flux ou les paquets concernés.
+- Score de confiance lorsque pertinent.
+
+### G. OpenNDR Correlation Engine
+
+Le moteur doit pouvoir regrouper plusieurs alertes et événements afin de détecter des scénarios plus complexes.
+
+Exemples :
+
+- Scan de ports suivi d'une connexion réussie.
+- Multiplication de requêtes DNS suspectes.
+- Activité inhabituelle d'un équipement.
+- Communications répétées avec une destination suspecte.
+- Séquence de comportements pouvant indiquer une compromission.
+
+La corrélation doit être temporelle et configurable.
+
+Prévoir :
+
+- Fenêtres temporelles.
+- Conditions.
+- Seuils.
+- Priorités.
+- Relations entre événements.
+- Déduplication.
+- Gestion des faux positifs.
+
+### H. OpenNDR Storage Engine
+
+Gérer séparément les données structurées et les fichiers de capture.
+
+**PostgreSQL**
+
+Stockage de :
+
+- Configuration.
+- Utilisateurs.
+- Rôles.
+- Interfaces.
+- Équipements.
+- Sessions.
+- Événements.
+- Alertes.
+- Incidents.
+- Règles.
+- Statistiques.
+- Historique administratif.
+
+**Stockage PCAP local**
+
+Les fichiers PCAP et PCAPNG doivent être conservés dans un répertoire dédié configurable.
+
+Prévoir :
+
+- Organisation par date et capture.
+- Indexation des fichiers.
+- Métadonnées.
+- Taille maximale.
+- Durée de rétention.
+- Suppression contrôlée.
+- Export.
+- Vérification d'intégrité lorsque possible.
+
+Les fichiers PCAP ne doivent pas être stockés directement dans PostgreSQL.
+
+OpenSearch pourra être envisagé ultérieurement comme composant optionnel si les volumes et les besoins de recherche le justifient. Il ne doit pas être une dépendance obligatoire de la première version.
+
+---
+
+# 5. FRONTEND ET INTERFACE WEB
+
+Technologies :
+
+- React.
+- TypeScript.
+- Vite.
+- PWA.
+- Bibliothèque de composants maintenue.
+- Tests frontend automatisés.
+
+L'interface doit être responsive et utilisable sur ordinateur, tablette et téléphone.
+
+## Écrans obligatoires
+
+### 5.1 Dashboard
+
+Afficher :
+
+- État général de la plateforme.
+- État du moteur de capture.
+- Interface de capture active.
+- Débit réseau entrant.
+- Débit réseau sortant.
+- Paquets reçus.
+- Paquets perdus.
+- Nombre de flux actifs.
+- Nombre d'équipements détectés.
+- Nombre d'alertes.
+- Incidents critiques.
+- Graphiques temporels.
+- Répartition des protocoles.
+
+### 5.2 Capture réseau
+
+- Démarrer une capture.
+- Arrêter une capture.
+- Sélectionner une interface autorisée.
+- Configurer les filtres.
+- Consulter les statistiques.
+- Consulter les erreurs.
+- Importer un fichier PCAP/PCAPNG.
+- Consulter l'historique des captures.
+
+### 5.3 Explorateur de paquets
+
+- Liste des paquets.
+- Horodatage.
+- Adresse source.
+- Adresse destination.
+- Ports.
+- Protocole.
+- Longueur.
+- Informations de décodage.
+- Détails du paquet.
+- Filtres.
+- Recherche.
+- Navigation entre paquets.
+- Accès aux paquets d'une session.
+
+### 5.4 Explorateur de sessions
+
+- Liste des flux.
+- Source et destination.
+- Protocole.
+- Durée.
+- Volume échangé.
+- Nombre de paquets.
+- Statut.
+- Informations applicatives.
+- Détails d'une session.
+- Accès aux paquets associés.
+- Export des informations disponibles.
+
+### 5.5 Analyse des protocoles
+
+Afficher les statistiques et les métadonnées par protocole.
+
+### 5.6 Équipements réseau
+
+- Adresse IP.
+- Adresse MAC.
+- Nom éventuel.
+- Première observation.
+- Dernière observation.
+- Protocoles utilisés.
+- Communications.
+- Alertes associées.
+- Historique d'activité.
+
+Ne pas inventer de noms d'équipements lorsqu'ils ne sont pas observables.
+
+### 5.7 Alertes
+
+- Liste des alertes.
+- Gravité.
+- Type.
+- Date.
+- Source.
+- Destination.
+- Règle déclenchée.
+- Détails techniques.
+- Statut.
+- Affectation.
+- Commentaires.
+- Historique.
+
+### 5.8 Incidents
+
+- Création automatique ou manuelle.
+- Regroupement d'alertes.
+- Chronologie.
+- Équipements concernés.
+- Flux associés.
+- Niveau de gravité.
+- État de traitement.
+- Notes d'investigation.
+- Historique des modifications.
+- Export du dossier d'incident.
+
+### 5.9 Threat Intelligence
+
+Prévoir une architecture permettant d'intégrer ultérieurement des sources externes facultatives :
+
+- IOC.
+- Adresses IP.
+- Domaines.
+- Hashes.
+- Listes de réputation.
+- Sources communautaires.
+
+Le fonctionnement principal d'OpenNDR doit rester possible sans connexion Internet.
+
+### 5.10 Administration
+
+- Utilisateurs.
+- Rôles.
+- Interfaces réseau.
+- Paramètres de capture.
+- Paramètres de stockage.
+- Rétention.
+- Gestion des règles.
+- État des services.
+- Journaux.
+- Sauvegardes.
+- Restauration.
+- Informations de version.
+
+---
+
+# 6. BASE DE DONNÉES
+
+Utiliser PostgreSQL avec SQLAlchemy et Alembic.
+
+Prévoir un modèle de données cohérent, documenté et évolutif.
+
+Tables ou entités initiales à étudier :
+
+- users
+- roles
+- permissions
+- user_roles
+- network_interfaces
+- capture_jobs
+- capture_files
+- network_devices
+- network_flows
+- network_events
+- protocol_metadata
+- detection_rules
+- detection_alerts
+- incidents
+- incident_alerts
+- incident_notes
+- system_settings
+- audit_logs
+
+Les relations et index doivent être définis selon les usages réels.
+
+Éviter de stocker chaque paquet individuellement dans PostgreSQL sans justification : le volume pourrait devenir très important.
+
+Prévoir une stratégie de rétention différenciée pour les événements, les alertes, les sessions et les captures.
+
+Toutes les évolutions de schéma doivent passer par des migrations Alembic.
+
+Ne jamais modifier silencieusement une base existante.
+
+Les migrations doivent être testées, documentées et accompagnées d'une stratégie de sauvegarde et de retour arrière lorsque cela est possible.
+
+---
+
+# 7. SÉCURITÉ
+
+La sécurité doit être intégrée dès la conception.
+
+## Authentification
+
+- Comptes locaux.
+- Mots de passe hachés avec Argon2id.
+- Politique de mots de passe.
+- Sessions sécurisées.
+- Déconnexion.
+- Protection contre les tentatives répétées.
+- Réinitialisation administrative contrôlée.
+
+## Autorisations
+
+Prévoir au minimum :
+
+**Administrateur**
+- Configuration complète.
+- Gestion des utilisateurs.
+- Gestion des services.
+- Gestion des règles.
+- Gestion du stockage.
+
+**Analyste**
+- Consultation des données.
+- Investigation.
+- Gestion des alertes et incidents selon ses permissions.
+
+**Observateur**
+- Consultation en lecture seule.
+
+Chaque route API doit vérifier les permissions nécessaires côté serveur.
+
+## Protection applicative
+
+- Validation des entrées.
+- Protection contre les injections SQL.
+- Protection contre les attaques XSS.
+- Protection CSRF lorsque le mécanisme d'authentification l'exige.
+- CORS restrictif.
+- Gestion sécurisée des secrets.
+- Limitation des requêtes.
+- Journalisation des opérations sensibles.
+- HTTPS en production.
+- WebSocket authentifiés et autorisés.
+- Vérification des fichiers importés.
+- Limitation des tailles et volumes d'import.
+- Protection des chemins de fichiers.
+- Prévention des traversées de répertoires.
+- Gestion sécurisée des erreurs.
+
+## Sécurité système
+
+- Services systemd avec privilèges minimaux.
+- Séparation du moteur de capture et du backend.
+- Accès aux capacités réseau limité au strict nécessaire.
+- Aucun lancement de processus avec privilèges root sans justification.
+- Permissions restrictives sur les fichiers PCAP.
+- Protection des sauvegardes.
+- Journalisation des actions administratives.
+- Aucun secret dans Git.
+
+Le moteur de capture doit disposer uniquement des privilèges nécessaires à la capture.
+
+Ne jamais exécuter les traitements applicatifs du backend avec les privilèges root.
+
+## Sécurité des données
+
+- Limites de rétention configurables.
+- Suppression contrôlée.
+- Journalisation des suppressions sensibles.
+- Protection des données exportées.
+- Vérification des sauvegardes.
+- Documentation des données collectées.
+
+OpenNDR est un outil de surveillance défensive. Les fonctionnalités doivent être conçues pour l'observation et l'analyse de réseaux autorisés, et non pour perturber les communications ou compromettre des équipements.
+
+---
+
+# 8. RÈGLES DE DÉVELOPPEMENT
+
+Ces règles sont obligatoires pour toutes les versions.
+
+## 8.1 Développement progressif
+
+Ne développe jamais toute la roadmap en une seule opération.
+
+Chaque version doit avoir :
+
+- Un périmètre précis.
+- Des fonctionnalités identifiées.
+- Des critères d'acceptation.
+- Des tests.
+- Une documentation.
+- Un compte rendu.
+
+Ne commence pas une nouvelle version tant que les critères de validation de la version précédente ne sont pas satisfaits ou que les écarts ne sont pas explicitement documentés.
+
+## 8.2 Qualité du code
+
+Python :
+- Typage explicite.
+- Pydantic.
+- Ruff.
+- Pytest.
+- Gestion centralisée des erreurs.
+- Séparation des responsabilités.
+
+Rust :
+- Gestion rigoureuse des erreurs.
+- Aucun panic sur des données réseau non fiables.
+- Tests unitaires.
+- Clippy.
+- Rustfmt.
+- Gestion mémoire contrôlée.
+- Pas d'unsafe sans justification technique documentée.
+
+TypeScript :
+- Mode strict activé.
+- Composants réutilisables.
+- Gestion des états explicite.
+- Validation des réponses API.
+- Tests des composants critiques.
+- Accessibilité.
+
+## 8.3 Dépendances
+
+Avant d'ajouter une dépendance :
+
+1. Vérifier qu'elle est réellement nécessaire.
+2. Vérifier sa maintenance.
+3. Vérifier sa compatibilité avec Debian 13.
+4. Vérifier sa version et sa stabilité.
+5. Vérifier sa licence.
+6. Évaluer ses dépendances transitives.
+7. Évaluer les risques de sécurité.
+8. Documenter son rôle.
+
+Ne jamais inventer une version de bibliothèque ou affirmer qu'une version est compatible sans vérification.
+
+Épingler les versions lorsque cela est pertinent et maintenir des fichiers de verrouillage reproductibles.
+
+Générer un inventaire des dépendances et de leurs licences.
+
+La licence du projet doit être confirmée après cet inventaire. AGPL-3.0 est une option envisagée, mais ne doit pas être imposée aux dépendances tierces.
+
+## 8.4 Gestion des erreurs
+
+Aucun échec ne doit être ignoré silencieusement.
+
+Prévoir :
+- Messages d'erreur exploitables.
+- Journaux structurés.
+- Identifiants de corrélation.
+- Gestion des exceptions.
+- État de santé des composants.
+- Dégradation contrôlée en cas de panne d'un module.
+
+## 8.5 Compatibilité
+
+Ne pas introduire de changement cassant sans :
+- L'identifier.
+- L'expliquer.
+- Mettre à jour la documentation.
+- Prévoir une migration lorsque nécessaire.
+- Ajouter des tests.
+
+## 8.6 Architecture modulaire
+
+Les composants doivent être indépendants autant que possible.
+
+Un analyseur de protocole doit pouvoir être ajouté sans réécrire le moteur de capture.
+
+Une nouvelle règle doit pouvoir être ajoutée sans modifier le cœur du moteur.
+
+Le frontend ne doit pas dépendre directement des structures internes Rust.
+
+Les interfaces entre composants doivent être documentées et versionnées.
+
+---
+
+# 9. STRUCTURE DU DÉPÔT GITHUB
+
+Utiliser la structure suivante comme cible initiale. Elle pourra être adaptée si une meilleure organisation est justifiée et documentée.
+
+```text
+opendr/
+├── README.md
+├── LICENSE
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── CHANGELOG.md
+├── .gitignore
+├── .editorconfig
+├── .env.example
+│
+├── docs/
+│   ├── specifications/
+│   │   ├── cahier-des-charges.md
+│   │   ├── exigences-fonctionnelles.md
+│   │   └── exigences-techniques.md
+│   ├── architecture/
+│   │   ├── architecture-generale.md
+│   │   ├── architecture-moteur.md
+│   │   ├── architecture-backend.md
+│   │   ├── architecture-frontend.md
+│   │   └── flux-de-donnees.md
+│   ├── installation/
+│   ├── administration/
+│   ├── utilisateur/
+│   ├── security/
+│   ├── protocols/
+│   ├── api/
+│   ├── testing/
+│   └── roadmap/
+│
+├── backend/
+│   ├── pyproject.toml
+│   ├── alembic.ini
+│   ├── migrations/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── repositories/
+│   │   ├── services/
+│   │   ├── detection/
+│   │   ├── correlation/
+│   │   └── main.py
+│   └── tests/
+│
+├── engine/
+│   ├── Cargo.toml
+│   ├── crates/
+│   │   ├── capture/
+│   │   ├── decoder/
+│   │   ├── flows/
+│   │   ├── protocols/
+│   │   ├── dpi/
+│   │   ├── detection/
+│   │   ├── correlation/
+│   │   └── common/
+│   └── tests/
+│
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tsconfig.json
+│   ├── public/
+│   └── src/
+│       ├── app/
+│       ├── components/
+│       ├── features/
+│       ├── hooks/
+│       ├── services/
+│       ├── types/
+│       └── tests/
+│
+├── database/
+│   ├── schemas/
+│   └── seeds/
+│
+├── rules/
+│   ├── network/
+│   ├── protocols/
+│   ├── anomalies/
+│   ├── behavioral/
+│   └── custom/
+│
+├── deployment/
+│   ├── systemd/
+│   ├── debian/
+│   ├── scripts/
+│   └── configuration/
+│
+├── samples/
+│   ├── pcaps/
+│   └── README.md
+│
+├── tests/
+│   ├── integration/
+│   ├── performance/
+│   ├── security/
+│   └── fixtures/
+│
+└── .github/
+    ├── workflows/
+    ├── ISSUE_TEMPLATE/
+    └── PULL_REQUEST_TEMPLATE.md
+```
+
+Ne crée pas artificiellement tous les dossiers s'ils ne contiennent aucun élément utile. Construis la structure progressivement.
+
+---
+
+# 10. FEUILLE DE ROUTE OFFICIELLE
+
+La roadmap constitue le cadre de développement du projet.
+
+Chaque version doit être validée avant de passer à la suivante.
+
+## V0.1 — Fondations techniques
+
+Objectif : disposer d'une base logicielle installable, structurée, testable et administrable.
+
+Fonctionnalités :
+
+- Structure du dépôt.
+- Backend FastAPI initial.
+- Frontend React/TypeScript initial.
+- Projet Rust initial.
+- Configuration centralisée.
+- PostgreSQL.
+- Première migration Alembic.
+- API de santé.
+- Authentification locale initiale.
+- Gestion des rôles de base.
+- Interface Web initiale.
+- Journalisation.
+- Gestion des erreurs.
+- Fichiers de configuration d'exemple.
+- Services systemd initiaux.
+- Scripts d'installation et de désinstallation.
+- Tests unitaires et d'intégration.
+- CI GitHub Actions.
+- Documentation d'installation et d'architecture.
+
+Critères de validation :
+
+- Installation reproductible sur Debian 13.
+- Démarrage des services.
+- Accès à l'interface Web.
+- Authentification fonctionnelle.
+- Connexion PostgreSQL.
+- Migrations fonctionnelles.
+- Vérification de l'état des composants.
+- Tests automatisés réussis.
+- Documentation complète.
+
+Ne pas implémenter les fonctionnalités avancées de capture et de détection dans cette version.
+
+## V0.2 — Capture et décodage des paquets
+
+Objectif : capturer et décoder les premiers paquets.
+
+Fonctionnalités :
+
+- Capture passive.
+- Import PCAP/PCAPNG.
+- Ethernet II.
+- ARP.
+- IPv4.
+- IPv6.
+- ICMP.
+- TCP.
+- UDP.
+- Filtres.
+- Statistiques.
+- Compteurs de pertes.
+- Explorateur de paquets initial.
+
+Validation :
+
+- Capture réelle autorisée.
+- Import de PCAP.
+- Décodage correct.
+- Gestion des paquets invalides.
+- Tests de non-plantage.
+- Mesures de performance.
+
+## V0.3 — Flux et protocoles
+
+Objectif : reconstruire les communications et identifier les protocoles.
+
+Fonctionnalités :
+
+- Reconstruction TCP.
+- Gestion UDP.
+- Gestion des sessions.
+- Gestion des timeouts.
+- DNS.
+- DHCP.
+- HTTP.
+- TLS métadonnées.
+- SSH.
+- Statistiques protocolaires.
+- Explorateur de sessions.
+
+Validation :
+
+- Reconstruction correcte sur jeux de tests.
+- Gestion des retransmissions.
+- Gestion des flux incomplets.
+- Tests de protocoles.
+- Mesure de la consommation mémoire.
+
+## V0.4 — Détection
+
+Objectif : développer le premier moteur de détection propre à OpenNDR.
+
+Fonctionnalités :
+
+- Moteur de règles.
+- Détection par signatures.
+- Détection par seuils.
+- Scans de ports.
+- Anomalies DNS.
+- Comportements inhabituels.
+- Alertes.
+- Gravité.
+- Justification des détections.
+- Interface de gestion des règles.
+
+Validation :
+
+- Jeux de PCAP connus.
+- Détections attendues.
+- Faux positifs mesurés.
+- Tests des règles.
+- Explication des alertes.
+
+## V0.5 — Corrélation et investigation
+
+Objectif : transformer les alertes en incidents exploitables.
+
+Fonctionnalités :
+
+- Moteur de corrélation.
+- Fenêtres temporelles.
+- Déduplication.
+- Incidents.
+- Chronologie.
+- Regroupement d'alertes.
+- Historique.
+- Notes d'investigation.
+- Export.
+
+Validation :
+
+- Scénarios de corrélation reproductibles.
+- Absence de doublons injustifiés.
+- Cohérence des relations entre alertes et incidents.
+
+## V0.6 — Threat Intelligence
+
+Objectif : enrichir les détections avec des indicateurs de compromission.
+
+Fonctionnalités :
+
+- Import IOC.
+- Adresses IP.
+- Domaines.
+- Hashes.
+- Listes de réputation.
+- Sources facultatives.
+- Mise à jour contrôlée.
+- Cache local.
+- Gestion de la fraîcheur des données.
+
+Validation :
+
+- Fonctionnement sans Internet.
+- Import et suppression contrôlés.
+- Traçabilité des sources.
+- Protection contre les données malformées.
+
+## V0.7 — Administration et exploitation
+
+Objectif : rendre la plateforme exploitable au quotidien.
+
+Fonctionnalités :
+
+- Administration complète.
+- Gestion des interfaces.
+- Sauvegarde et restauration.
+- Rétention.
+- Supervision des services.
+- Journaux.
+- Gestion des utilisateurs.
+- Configuration avancée.
+- Amélioration de l'ergonomie.
+
+Validation :
+
+- Restauration testée.
+- Rétention testée.
+- Contrôle des permissions.
+- Redémarrage et reprise des services.
+
+## V0.8 — DPI avancé et protocoles complémentaires
+
+Objectif : enrichir les capacités d'analyse.
+
+Fonctionnalités à étudier et intégrer progressivement :
+
+- SMB.
+- NTP.
+- SNMP.
+- MQTT.
+- SMTP.
+- POP3.
+- IMAP.
+- FTP.
+- RDP.
+- GRE.
+- VXLAN.
+- Analyse de structures applicatives.
+- Règles DPI avancées.
+
+Validation :
+
+- Tests par protocole.
+- Cas malformés.
+- Gestion des flux fragmentés.
+- Vérification des limites de visibilité sur les flux chiffrés.
+
+## V0.9 — Performance, robustesse et sécurité
+
+Objectif : préparer une version candidate à la production.
+
+Fonctionnalités :
+
+- Optimisation du moteur.
+- Gestion des buffers.
+- Limitation mémoire.
+- Optimisation PostgreSQL.
+- Tests de charge.
+- Tests de sécurité.
+- Tests de longue durée.
+- Gestion des pannes.
+- Documentation de dépannage.
+- Audit des dépendances.
+- Audit des licences.
+
+Validation :
+
+- Benchmarks reproductibles.
+- Aucun défaut critique connu non traité.
+- Tests de restauration.
+- Tests de stabilité.
+- Analyse des vulnérabilités.
+
+## V1.0 — Première version stable
+
+Objectif : publier une plateforme NDR autonome, documentée et utilisable.
+
+Critères obligatoires :
+
+- Installation Debian reproductible.
+- Capture passive fonctionnelle.
+- Import PCAP/PCAPNG.
+- Décodage réseau.
+- Reconstruction des flux.
+- Analyse des protocoles prévus.
+- Moteur de détection.
+- Corrélation.
+- Alertes.
+- Incidents.
+- Interface Web complète.
+- Authentification et rôles.
+- Sauvegarde et restauration.
+- Rétention.
+- Journalisation.
+- Tests automatisés.
+- Documentation utilisateur et administrateur.
+- Documentation de l'architecture.
+- Inventaire des dépendances et licences.
+- Procédure de mise à jour.
+- Procédure de désinstallation.
+- Aucune dépendance obligatoire à un produit NDR tiers.
+
+Ne déclare jamais la V1.0 prête simplement parce que toutes les pages de l'interface existent. Les critères fonctionnels, techniques, de sécurité et de test doivent être réellement validés.
+
+---
+
+# 11. TESTS OBLIGATOIRES
+
+Chaque évolution doit apporter ses tests.
+
+## Tests backend
+
+- Tests unitaires.
+- Tests API.
+- Tests authentification.
+- Tests autorisations.
+- Tests migrations.
+- Tests gestion des erreurs.
+- Tests validation des données.
+
+## Tests Rust
+
+- Tests décodeur.
+- Tests capture.
+- Tests flux.
+- Tests protocoles.
+- Tests détection.
+- Tests des entrées malformées.
+- Tests de robustesse.
+
+## Tests frontend
+
+- Tests composants.
+- Tests navigation.
+- Tests formulaires.
+- Tests authentification.
+- Tests gestion des erreurs.
+- Tests des interactions critiques.
+
+## Tests d'intégration
+
+Vérifier les échanges entre :
+
+- Moteur Rust.
+- Backend FastAPI.
+- PostgreSQL.
+- Frontend.
+- Stockage PCAP.
+
+## Tests de sécurité
+
+Prévoir notamment :
+
+- Tentatives d'accès non autorisées.
+- Permissions insuffisantes.
+- Entrées malformées.
+- Fichiers malveillants ou incorrects.
+- Traversées de répertoires.
+- Secrets exposés.
+- Accès aux captures.
+- Tests des API.
+- Dépendances vulnérables.
+
+## Tests de performance
+
+Mesurer :
+
+- Paquets par seconde.
+- Débit.
+- Paquets perdus.
+- CPU.
+- RAM.
+- Nombre de flux simultanés.
+- Latence de traitement.
+- Croissance du stockage.
+
+Tous les résultats de performance doivent être accompagnés de la configuration matérielle, des paramètres et des jeux de tests utilisés.
+
+Ne jamais inventer des résultats de benchmark.
+
+---
+
+# 12. INSTALLATION ET DÉPLOIEMENT
+
+OpenNDR doit pouvoir être installé sur Debian sans intervention manuelle complexe.
+
+Prévoir :
+
+- Vérification de la distribution.
+- Vérification des prérequis.
+- Vérification des ressources.
+- Vérification des interfaces réseau.
+- Installation des dépendances.
+- Initialisation de PostgreSQL.
+- Création de la base.
+- Exécution des migrations.
+- Configuration des services.
+- Installation des unités systemd.
+- Création des répertoires de données.
+- Configuration des permissions.
+- Initialisation de l'administrateur.
+- Vérification finale.
+
+Prévoir également :
+
+- Script de mise à jour.
+- Sauvegarde préalable.
+- Vérification de l'intégrité.
+- Gestion des erreurs.
+- Retour arrière documenté.
+- Désinstallation propre.
+
+Ne jamais supprimer automatiquement les données utilisateur lors d'une désinstallation sans confirmation explicite.
+
+---
+
+# 13. DOCUMENTATION OBLIGATOIRE
+
+Maintenir en permanence :
+
+- README.md.
+- Cahier des charges.
+- Architecture générale.
+- Architecture détaillée du moteur.
+- Documentation backend.
+- Documentation frontend.
+- Documentation API.
+- Documentation des protocoles.
+- Documentation des règles.
+- Guide d'installation Debian.
+- Guide de configuration.
+- Guide d'administration.
+- Guide utilisateur.
+- Guide de dépannage.
+- Documentation sécurité.
+- Politique de rétention.
+- Procédure de sauvegarde.
+- Procédure de restauration.
+- Procédure de mise à jour.
+- Inventaire des dépendances.
+- Inventaire des licences.
+- CHANGELOG.md.
+- Roadmap.
+
+Toute nouvelle fonctionnalité doit être documentée dans la documentation concernée.
+
+Ne pas laisser de documentation décrivant une fonctionnalité qui n'existe pas réellement.
+
+---
+
+# 14. INTÉGRATION CONTINUE GITHUB
+
+Mettre en place GitHub Actions.
+
+Les pipelines doivent progressivement vérifier :
+
+- Formatage Python.
+- Lint Python.
+- Tests Python.
+- Formatage Rust.
+- Clippy.
+- Tests Rust.
+- Vérification TypeScript.
+- Lint frontend.
+- Tests frontend.
+- Build frontend.
+- Tests d'intégration adaptés.
+- Analyse des dépendances.
+- Vérification des secrets.
+- Vérification des migrations.
+
+Les contrôles doivent être reproductibles.
+
+Les versions de GitHub Actions et des outils doivent être épinglées ou maîtrisées selon une politique documentée.
+
+Aucune CI ne doit être déclarée verte si certains tests ont simplement été ignorés.
+
+---
+
+# 15. RÈGLES DE COLLABORATION AVEC CODEX
+
+Tu dois suivre strictement cette méthode de travail.
+
+## Étape 1 — Audit initial
+
+Avant toute modification :
+
+1. Examiner le dépôt existant.
+2. Lire le README.
+3. Examiner la structure.
+4. Identifier les technologies présentes.
+5. Identifier les fonctionnalités existantes.
+6. Examiner les tests.
+7. Examiner les dépendances.
+8. Examiner les workflows GitHub.
+9. Identifier les problèmes éventuels.
+10. Comparer l'état réel du projet au présent cahier des charges.
+
+Ne suppose pas que le dépôt est vide.
+
+Ne supprime jamais une fonctionnalité existante sans justification et sans validation.
+
+## Étape 2 — Rapport initial
+
+Produire un rapport contenant :
+
+- État du dépôt.
+- Éléments conformes.
+- Éléments manquants.
+- Problèmes identifiés.
+- Risques techniques.
+- Propositions d'amélioration.
+- Plan d'exécution V0.1.
+
+## Étape 3 — Architecture
+
+Avant l'implémentation :
+
+- Définir les composants.
+- Définir leurs responsabilités.
+- Définir les interfaces.
+- Définir les échanges de données.
+- Définir les modèles initiaux.
+- Définir les règles de sécurité.
+- Documenter les décisions d'architecture importantes.
+
+Créer des ADR (Architecture Decision Records) pour les choix structurants.
+
+## Étape 4 — Implémentation
+
+Travailler par petits lots cohérents.
+
+Pour chaque lot :
+
+1. Expliquer l'objectif.
+2. Identifier les fichiers concernés.
+3. Implémenter.
+4. Ajouter les tests.
+5. Exécuter les tests.
+6. Corriger les problèmes.
+7. Mettre à jour la documentation.
+8. Vérifier l'absence de régression.
+
+Ne pas poursuivre si une erreur critique reste non résolue.
+
+## Étape 5 — Validation
+
+À la fin de chaque version :
+
+- Exécuter tous les tests pertinents.
+- Vérifier les migrations.
+- Vérifier les permissions.
+- Vérifier les configurations.
+- Vérifier les scripts.
+- Vérifier la documentation.
+- Vérifier le build.
+- Identifier les limitations restantes.
+
+## Étape 6 — Rapport final
+
+Fournir systématiquement un compte rendu structuré :
+
+**1. Fonctionnalités développées**
+
+**2. Fichiers créés**
+
+**3. Fichiers modifiés**
+
+**4. Choix techniques effectués**
+
+**5. Tests exécutés**
+
+Pour chaque test, indiquer :
+- La commande.
+- Le résultat réel.
+- Le nombre de tests réussis et échoués lorsque disponible.
+
+**6. Problèmes identifiés**
+
+**7. Points non terminés**
+
+**8. Risques et limitations**
+
+**9. Documentation mise à jour**
+
+**10. Prochaine étape recommandée**
+
+Ne jamais affirmer qu'une fonctionnalité est terminée si elle n'a pas été vérifiée.
+
+Ne jamais prétendre qu'une installation réelle a été testée si elle ne l'a pas été.
+
+Ne jamais inventer de résultats de tests.
+
+---
+
+# 16. CONSIGNES DE DÉVELOPPEMENT À RESPECTER ABSOLUMENT
+
+1. Ne développe pas toutes les versions en même temps.
+2. Commence par auditer le dépôt.
+3. Ne détruis pas le travail existant.
+4. Ne crée pas de fonctionnalités fictives.
+5. Ne livre pas de boutons sans fonctionnalité réelle.
+6. Ne simule pas des données de production sans les identifier explicitement comme données de démonstration.
+7. Ne stocke pas les PCAP dans PostgreSQL.
+8. Ne rends pas OpenSearch obligatoire.
+9. Ne rends pas Suricata, Zeek, Arkime ou Security Onion obligatoires.
+10. Ne confonds pas détection de métadonnées TLS et déchiffrement.
+11. Ne lance pas le backend avec les privilèges root.
+12. Ne néglige pas les performances du moteur Rust.
+13. Ne développe pas un module sans tests.
+14. Ne modifie pas la base sans migration.
+15. Ne livre pas une version sans documentation.
+16. Ne masque pas les erreurs.
+17. Ne présente pas une fonctionnalité partiellement développée comme terminée.
+18. Ne remplace pas une architecture fonctionnelle par une solution plus complexe sans justification.
+19. N'ajoute pas de dépendances inutiles.
+20. Préserve la compatibilité et la possibilité de mise à jour.
+
+---
+
+# 17. PREMIÈRE MISSION À EXÉCUTER
+
+**Commence exclusivement par la V0.1.**
+
+Ne développe pas la V0.2 ni les versions suivantes.
+
+Effectue dans l'ordre :
+
+1. Audit complet du dépôt existant.
+2. Rapport d'état et d'écarts.
+3. Proposition d'architecture initiale.
+4. Vérification des technologies et dépendances.
+5. Vérification des licences.
+6. Définition des interfaces entre les composants.
+7. Création ou adaptation de la structure du dépôt.
+8. Développement des fondations backend.
+9. Développement des fondations frontend.
+10. Initialisation du projet Rust.
+11. Initialisation de PostgreSQL et Alembic.
+12. Authentification et rôles initiaux.
+13. Journalisation et gestion des erreurs.
+14. Services systemd initiaux.
+15. Scripts d'installation et de désinstallation.
+16. Tests automatisés.
+17. CI GitHub Actions.
+18. Documentation V0.1.
+
+Ne développe pas encore le moteur complet de capture, le DPI, les analyseurs de protocoles, le moteur de détection ou le moteur de corrélation.
+
+Ces composants seront développés dans les versions suivantes.
+
+## Critères de sortie de V0.1
+
+La V0.1 est considérée comme terminée uniquement si :
+
+- Le projet possède une architecture cohérente.
+- Les composants initiaux démarrent correctement.
+- Le backend répond.
+- Le frontend est accessible.
+- L'authentification fonctionne.
+- Les rôles sont contrôlés côté serveur.
+- PostgreSQL fonctionne.
+- Les migrations sont opérationnelles.
+- Les journaux sont exploitables.
+- Les services systemd sont configurés.
+- Les scripts d'installation sont testés dans l'environnement disponible.
+- Les tests automatisés passent.
+- La CI fonctionne.
+- La documentation est à jour.
+- Les limites et points non terminés sont identifiés.
+
+Si l'environnement ne permet pas de tester une installation Debian complète, indique-le explicitement et fournis les commandes et étapes permettant de réaliser cette validation.
+
+---
+
+# 18. OBJECTIF FINAL
+
+À terme, OpenNDR doit devenir une plateforme NDR open source autonome, développée autour de ses propres composants et capable de fournir :
+
+- Capture réseau.
+- Décodage.
+- Reconstruction des flux.
+- Analyse des protocoles.
+- DPI.
+- Détection par signatures.
+- Détection comportementale.
+- Corrélation.
+- Alertes.
+- Incidents.
+- Investigation.
+- Cartographie réseau.
+- Threat Intelligence facultative.
+- Administration Web.
+- Sauvegarde et restauration.
+- Déploiement Debian.
+
+Le résultat attendu n'est pas une simple démonstration technique.
+
+C'est un véritable logiciel de cybersécurité, fiable, sécurisé, documenté, évolutif et maintenable.
+
+**Priorité absolue : construire des fondations solides en V0.1, puis faire évoluer OpenNDR méthodiquement jusqu'à la V1.0.**

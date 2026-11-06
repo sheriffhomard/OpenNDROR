@@ -1,0 +1,36 @@
+# ==============================================================================
+# OpenNDR V0.1 — Configuration Globale de la Sonde
+# ==============================================================================
+
+[network]
+# Interface d'administration pour accès SOC et API
+admin_interface = "eth0"
+
+# Interface passive connectée au miroir SPAN / TAP
+# ATTENTION : Ne doit jamais posséder d'adresse IP ni de route par défaut
+capture_interface = "eth1"
+
+# Taille du buffer de capture (en Mo)
+capture_buffer_size_mb = 256
+
+# Mode promiscuous obligatoire pour l'écoute
+promiscuous_mode = true
+
+[engine]
+# Socket IPC UNIX pour le contrôle interne depuis FastAPI
+ipc_socket_path = "/run/openndr/engine.sock"
+log_level = "info"
+worker_threads = 4
+
+[storage]
+# Répertoire dédié au stockage des fichiers PCAP (isolé chmod 700)
+pcap_dir = "/var/lib/openndr/captures"
+max_storage_gb = 500
+retention_days = 30
+max_file_size_mb = 1000
+
+[database]
+# Connexion PostgreSQL (stockage structuré: utilisateurs, rôles, interfaces, logs)
+url = "postgresql+psycopg2://openndr:openndr_secure_password@127.0.0.1:5432/openndr_db"
+pool_size = 10
+max_overflow = 20

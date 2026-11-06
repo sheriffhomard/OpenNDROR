@@ -1,0 +1,6 @@
+{
+  "name": "OpenNDR - Network Detection and Response",
+  "description": "Plateforme open source de Network Detection and Response (NDR) autonome pour Debian avec capture passive, analyse de protocoles, détection et supervision SOC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,42 @@
+name: OpenNDR Continuous Integration (CI)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-checks:
+    name: Backend Lint & Tests (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest httpx
+      - name: Run Ruff Lint
+        run: ruff check backend/
+      - name: Run Backend Tests
+        run: PYTHONPATH=backend python -m unittest discover -s backend/tests
+
+  frontend-checks:
+    name: Frontend Lint & Build (TypeScript / React)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript Verification
+        run: npm run lint
+      - name: Production Build
+        run: npm run build

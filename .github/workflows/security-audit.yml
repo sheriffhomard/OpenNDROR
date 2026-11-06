@@ -1,0 +1,17 @@
+name: OpenNDR Security & Dependencies Audit
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=high || true
+      - name: Check for accidental secrets in git
+        run: |
+          ! grep -rn "PRIVATE KEY" --exclude-dir=node_modules --exclude-dir=.git . || exit 1

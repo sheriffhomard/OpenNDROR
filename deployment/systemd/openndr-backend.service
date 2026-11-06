@@ -1,0 +1,27 @@
+[Unit]
+Description=OpenNDR Core Backend API Service (FastAPI)
+Documentation=https://github.com/openndr/openndr
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=openndr
+Group=openndr
+WorkingDirectory=/opt/openndr/backend
+EnvironmentFile=/etc/openndr/backend.env
+ExecStart=/opt/openndr/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 4
+Restart=always
+RestartSec=5s
+
+# Sécurité & Durcissement systemd
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+PrivateTmp=true
+ReadWritePaths=/var/log/openndr /var/lib/openndr /run/openndr
+
+[Install]
+WantedBy=multi-user.target

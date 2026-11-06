@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/common",
     "crates/capture",
+    "crates/engine",
 ]
 
 [workspace.package]
@@ -16,6 +17,6 @@ repository = "https://github.com/openndr/openndr"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
-tokio = { version = "1.37", features = ["full"] }
+tokio = { version = "=1.38.1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"

@@ -37,11 +37,11 @@ def get_current_user(
         )
 
     token = authorization.split(" ")[1]
-    payload = decode_token(token)
+    payload = decode_token(token, db=db)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session invalide ou expirée.",
+            detail="Session invalide, révoquée ou expirée.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

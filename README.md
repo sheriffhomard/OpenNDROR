@@ -1,120 +1,161 @@
 # OpenNDR — Open Source Network Detection and Response
 
-OpenNDR est une plateforme open source de **Network Detection and Response (NDR)** autonome conçue pour Debian 13, dédiée à la surveillance passive du trafic réseau, au décodage de protocoles, à l'inspection approfondie (DPI), à la détection d'anomalies et à la réponse à incident en environnement SOC.
-
-> **Règle fondamentale** : OpenNDR est un logiciel entièrement autonome. Il possède ses propres moteurs de capture, décodage, reconstruction de flux, détection comportementale et corrélation, sans dépendance obligatoire vers des outils tiers (Suricata, Zeek, Arkime).
-
----
-
-## 🚀 Version Actuelle : V0.1 (Fondations Techniques)
-
-La version V0.1 établit les fondations logicielles, sécuritaires et architecturales de la plateforme :
-- **Architecture modulaire à 3 niveaux** : Moteur réseau autonome en Rust, Backend d'orchestration en FastAPI/Python, Interface Web SOC en React/TypeScript.
-- **Séparation stricte des interfaces réseau** :
-  - *Interface d'administration (`eth0`)* : accessible par l'équipe SOC, adresse IP statique, API/Web.
-  - *Interface de capture passive (`eth1`)* : mode promisc, **zéro adresse IP**, aucune émission de trames, isolation totale.
-- **Authentification & Contrôle d'accès basé sur les rôles (RBAC)** :
-  - Rôles `Administrator`, `Analyst`, `Observer` avec validation stricte côté serveur.
-  - Hachage de mots de passe Argon2id / PBKDF2 et jetons de session sécurisés.
-- **Supervision & Journaux d'audit** : traçabilité des accès, état des services systemd, contrôle d'intégrité.
-- **Déploiement Debian 13 natif** : scripts `install.sh`, `uninstall.sh`, unités systemd, migrations de base de données PostgreSQL/Alembic.
+**Dépôt officiel** : https://github.com/sheriffhomard/OpenNDROR  
+**Version** : V0.1 (Fondations Logicielles et Architecture Système)  
+**Licence** : AGPL-3.0  
+**Système d'exploitation cible** : Debian 13 (Trixie) GNU/Linux  
 
 ---
 
-## 🏛️ Architecture Générale
+## 1. Présentation Générale
+
+OpenNDR est une plateforme open source souveraine de **Network Detection and Response (NDR)** autonome pour Debian 13.
+Conçue pour les centres opérationnels de sécurité (SOC) et les infrastructures critiques, elle offre une traçabilité réseau totale sans dépendre de services cloud externes, abonnements ou sondes propriétaires.
+
+> **Principe d'indépendance** : OpenNDR intègre ses propres composants logiciels sans imposer de dépendances obligatoires vers des moteurs tiers (Suricata, Zeek ou Arkime).
+
+---
+
+## 2. Périmètre et État Réel de la Version V0.1
+
+Conformément au cahier des charges de développement, la **V0.1** établit un socle technique robuste, testé et audité.  
+Elle ne simule **aucune** fonctionnalité non encore développée.
+
+| Composant | État V0.1 | Description technique |
+|---|---|---|
+| **Backend REST** | **Implémenté & Testé** | FastAPI, Pydantic V2, SQLAlchemy 2.0, pool de connexions durci |
+| **Authentification** | **Implémenté & Testé** | Argon2id natif obligatoire en production, rejet absolu des secrets par défaut |
+| **Sessions JWT** | **Implémenté & Testé** | Validation stricte des claims (`sub`, `iss`, `aud`, `exp`, `iat`, `jti`), signature HMAC-SHA256 |
+| **Révocation JWT** | **Implémenté & Testé** | Persistante et partagée multi-workers via table PostgreSQL `revoked_tokens` |
+| **Contrôle d'accès** | **Implémenté & Testé** | RBAC strict (`Administrator`, `Analyst`, `Observer`) vérifié sur chaque endpoint serveur |
+| **Bootstrap Admin** | **Implémenté & Testé** | Commande CLI `openndr-admin create-first-admin` à usage unique |
+| **Base de données** | **Implémenté & Testé** | PostgreSQL relationnel, schémas pilotés exclusivement par Alembic |
+| **Journal d'audit** | **Implémenté & Testé** | Table `audit_logs` append-only, horodatage UTC, IP, masquage strict des secrets |
+| **Frontend Web** | **Implémenté & Testé** | React 19, TypeScript, Tailwind CSS, communication HTTP réelle avec l'API REST |
+| **Moteur Réseau (Rust)** | **Skeleton / Standby** | Binaire natif `openndr-engine`, socket IPC `/run/openndr/engine.sock`, gestion SIGINT/SIGTERM |
+| **Capture AF_PACKET** | *Prévu en V0.2* | **Non actif en V0.1** (0 paquets capturés, aucune simulation artificielle) |
+| **Décodage & DPI** | *Prévu en V0.2/V0.3* | Non implémenté en V0.1 |
+| **Moteur de détection** | *Prévu en V0.4* | Non implémenté en V0.1 |
+
+---
+
+## 3. Architecture Technique
 
 ```
-                           RÉSEAU SURVEILLÉ (SPAN / Mirror / TAP)
-                                          │
-                                          ▼
-                      ┌──────────────────────────────────────┐
-                      │    Interface de Capture Passive      │
-                      │       (eth1: No IP, Promisc)         │
-                      └──────────────────┬───────────────────┘
-                                         │ AF_PACKET / libpcap
-                                         ▼
-                      ┌──────────────────────────────────────┐
-                      │      OpenNDR Network Engine (Rust)   │
-                      │  - Capture & Buffer en anneau        │
-                      │  - Décodage L2-L4                    │
-                      │  - Reconstruction flux TCP/UDP       │
-                      │  - Analyseurs protocolaires & DPI    │
-                      │  - Moteur de détection & corrélation │
-                      └──────────────────┬───────────────────┘
-                                         │ IPC Sécurisé (UNIX Socket)
-                                         ▼
-                      ┌──────────────────────────────────────┐
-                      │      OpenNDR Backend (FastAPI)       │
-                      │  - API REST & WebSocket              │
-                      │  - Authentification & RBAC           │
-                      │  - Gestion sessions & alertes        │
-                      │  - Stockage PostgreSQL & PCAP local  │
-                      └──────────────────┬───────────────────┘
-                                         │ HTTPS / WSS
-                                         ▼
-                      ┌──────────────────────────────────────┐
-                      │       OpenNDR Web Interface          │
-                      │   (React / TypeScript / Tailwind)    │
-                      │      Tableaux de bord SOC & PWA      │
-                      └──────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        RÉSEAU SOC / SUPERVISION                        │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ HTTPS (Port 443 / Reverse Proxy)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  Serveur Web Nginx & Frontend SPA React (/opt/openndr/dist)           │
+│  - Tableaux de bord de supervision                                     │
+│  - Gestion RBAC des utilisateurs                                       │
+│  - Journal d'audit et diagnostic de conformité                         │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ /api/v1/ (HTTP REST)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  Backend d'Orchestration FastAPI (/opt/openndr/backend)               │
+│  - Authentification Argon2id & Délivrance JWT                           │
+│  - Middleware RBAC & Révocation persistante des jetons                 │
+│  - Supervision système & sondes liveness/readiness                     │
+│  - CLI d'administration : openndr-admin create-first-admin             │
+└───────────────┬────────────────────────────────────────┬───────────────┘
+                │ SQLAlchemy                             │ UNIX Socket IPC
+                ▼                                        ▼
+┌────────────────────────────────┐      ┌────────────────────────────────┐
+│ PostgreSQL 15+ & Alembic       │      │ Moteur Réseau Rust (Skeleton)  │
+│ - Users, Roles, Permissions    │      │ - Standby V0.1 (attente V0.2)  │
+│ - Revoked Tokens (persistant)  │      │ - IPC /run/openndr/engine.sock │
+│ - Audit Logs (append-only)     │      │ - Capture passive (Zéro IP)    │
+│ - Network Interfaces state     │      │ - Ring Buffer AF_PACKET (V0.2) │
+└────────────────────────────────┘      └────────────────────────────────┘
 ```
 
 ---
 
-## 📦 Structure du Dépôt
+## 4. Arborescence du Projet
 
 ```text
-openndr/
-├── README.md               # Ce document
-├── LICENSE                 # Licence AGPL-3.0
-├── CONTRIBUTING.md          # Guide de contribution et standards de code
-├── SECURITY.md             # Politique de sécurité et divulgation responsable
-├── CHANGELOG.md            # Historique des versions
-├── .env.example            # Variables d'environnement de référence
-├── docs/                   # Documentation technique et spécifications
-│   ├── specifications/     # Cahier des charges et exigences
-│   ├── architecture/       # ADR, diagrammes et architecture
-│   ├── installation/       # Guides de déploiement Debian 13
-│   ├── administration/     # Gestion RBAC et configuration
-│   └── api/                # Spécifications de l'API REST
-├── backend/                # Backend FastAPI / SQLAlchemy / Alembic
-├── engine/                 # Moteur réseau natif en Rust
-├── frontend/               # Interface Web React / TypeScript / Vite
-├── database/               # Schémas SQL et données de référence
-└── deployment/             # Unités systemd et scripts Debian
+OpenNDROR/
+├── backend/                    # Backend Python / FastAPI / SQLAlchemy / Alembic
+│   ├── app/
+│   │   ├── api/v1/             # Routes REST versionnées (auth, users, system, health)
+│   │   ├── core/               # Configuration, base de données, sécurité Argon2id/JWT
+│   │   ├── models/             # Modèles SQLAlchemy (User, Role, RevokedToken, AuditLog)
+│   │   ├── schemas/            # Validation Pydantic V2
+│   │   ├── services/           # Services métier (AuthService, UserService, AuditService)
+│   │   └── cli.py              # CLI d'administration (openndr-admin)
+│   ├── migrations/             # Migrations versionnées Alembic
+│   ├── tests/                  # Suite de tests automatisés pytest
+│   └── pyproject.toml          # Dépendances Python et script entrypoint
+├── engine/                     # Workspace Rust (openndr-engine)
+│   ├── crates/engine/          # Binaire serveur IPC et skeleton capture
+│   └── Cargo.toml              # Dépendances et workspace Rust
+├── deployment/                 # Déploiement natif Debian 13
+│   ├── debian/                 # install.sh, uninstall.sh, check-prerequisites.sh, nginx
+│   ├── systemd/                # openndr-backend.service, openndr-engine.service, openndr-web.service
+│   └── configuration/          # backend.env.example, openndr.conf.example
+├── docs/                       # Documentation d'ingénierie et spécifications
+│   ├── ARCHITECTURE.md         # Décisions d'architecture détaillées
+│   ├── INSTALLATION_DEBIAN_13.md# Guide complet d'installation pas-à-pas
+│   ├── CONFIGURATION.md        # Guide des variables d'environnement et de configuration
+│   ├── SECURITY.md             # Modèle de sécurité et politique de divulgation
+│   ├── API.md                  # Spécification exhaustive des routes REST V1
+│   ├── DATABASE.md             # Dictionnaire des tables et schéma Alembic
+│   ├── DEVELOPMENT.md          # Guide de contribution locale
+│   ├── TESTING.md              # Procédures de test et d'assurance qualité
+│   ├── ROADMAP.md              # Feuille de route technique V0.1 -> V1.0
+│   └── TROUBLESHOOTING.md      # Résolution des anomalies opérationnelles
+├── src/                        # Interface Web React / TypeScript / Vite
+├── index.html                  # Point d'entrée SPA
+├── package.json                # Dépendances Node.js / React
+├── vite.config.ts              # Configuration Vite avec proxy /api
+└── .github/workflows/ci.yml    # Pipeline d'intégration continue GitHub Actions
 ```
 
 ---
 
-## 🛠️ Prérequis et Installation sur Debian 13
+## 5. Guide de Déploiement Rapide (Debian 13)
 
-### Matériel recommandé (Laboratoire)
-- CPU : 8 cœurs (x86_64)
-- RAM : 32 Go (8 Go minimum en environnement de test)
-- Disque : 1 To NVMe pour l'historique PCAP et base de données
-- Réseau : 2 interfaces réseau physiques distinctes
+### 5.1 Prérequis
+- Debian 13 (Trixie) x86_64
+- 2 cœurs CPU minimum (4+ recommandés)
+- 4 Go de mémoire RAM minimum (8+ Go recommandés)
+- 2 interfaces réseau physiques (ex: `eth0` pour gestion IP, `eth1` pour écoute passive sans IP)
 
-### Déploiement automatique
+### 5.2 Installation Automatique
 ```bash
-# Cloner le dépôt
-git clone https://github.com/openndr/openndr.git /opt/openndr
+git clone https://github.com/sheriffhomard/OpenNDROR.git /opt/openndr
 cd /opt/openndr
-
-# Exécuter le script de prérequis et d'installation
-sudo bash deployment/debian/check-prerequisites.sh
 sudo bash deployment/debian/install.sh
 ```
 
+### 5.3 Initialisation Obligatoire du Premier Administrateur
+```bash
+# La plateforme refuse tout démarrage avec des comptes par défaut
+openndr-admin create-first-admin --email admin@votre-domaine.local --full-name "Admin SOC"
+```
+
+### 5.4 Démarrage des Services
+```bash
+sudo systemctl start openndr-backend
+sudo systemctl start openndr-engine
+```
+
+### 5.5 Vérification des Statuts
+```bash
+curl -s http://127.0.0.1:8000/api/v1/health | jq .
+curl -s http://127.0.0.1:8000/api/v1/health/ready | jq .
+```
+
 ---
 
-## 🛡️ Sécurité et Confidentialité
+## 6. Prochaines Étapes : Préparation V0.2
 
-OpenNDR est strictement un outil d'observation et de cyberdéfense passive. Par conception :
-- L'interface de capture ne répond à aucun paquet ARP, ICMP ou TCP.
-- Les données PCAP brutes sont isolées avec des permissions strictes `chmod 700` et ne sont pas stockées dans la base de données relationnelle.
-- Les accès administratifs sont audités systématiquement dans un journal d'événements inviolable.
-
----
-
-## 📄 Licence
-OpenNDR est publié sous licence GNU Affero General Public License v3.0 (AGPL-3.0). Voir le fichier [LICENSE](./LICENSE) pour plus de détails.
+La version **V0.2** introduira les mécanismes réels de capture réseau et de décodage :
+1. Ring buffer kernel `AF_PACKET` (PACKET_MMAP) dans le moteur Rust.
+2. Ingestion et rejeu de fichiers `.pcap` et `.pcapng`.
+3. Décodeur hiérarchique L2 à L4 (Ethernet II, 802.1Q, ARP, IPv4, IPv6, TCP, UDP, ICMP).
+4. Calcul des métriques de trafic en temps réel sans simulation.

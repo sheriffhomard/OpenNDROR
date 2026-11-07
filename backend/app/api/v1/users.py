@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate, UserOut
+from app.schemas.user import UserCreate, UserUpdate, UserOut, UserCreateResponse
 from app.services.user_service import UserService
 from app.api.deps import require_permission, get_client_ip
 
@@ -37,7 +37,7 @@ def list_users(
     ]
 
 
-@router.post("", response_model=UserOut)
+@router.post("", response_model=UserCreateResponse)
 def create_user(
     user_in: UserCreate,
     request: Request,
@@ -46,7 +46,7 @@ def create_user(
 ):
     """Création d'un nouvel utilisateur par un administrateur."""
     ip_addr = get_client_ip(request)
-    new_user, _ = UserService.create_user(
+    new_user, raw_password = UserService.create_user(
         db=db,
         user_in=user_in,
         current_admin=current_admin,
@@ -61,6 +61,7 @@ def create_user(
         "is_active": new_user.is_active,
         "created_at": new_user.created_at,
         "last_login_at": new_user.last_login_at,
+        "temporary_password": raw_password if not user_in.password else None,
     }
 
 

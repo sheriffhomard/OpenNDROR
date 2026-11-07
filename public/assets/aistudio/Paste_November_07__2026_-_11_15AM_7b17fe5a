@@ -1,0 +1,1158 @@
+# PROMPT CODEX — OPENNDR
+## V0.1 — Lot correctif final après audit du 7 novembre 2026
+
+Tu interviens sur le dépôt GitHub existant :
+
+https://github.com/sheriffhomard/OpenNDROR
+
+Tu dois effectuer un audit technique approfondi, corriger les défauts identifiés et finaliser la version V0.1 d'OpenNDR.
+
+**Il ne s'agit pas de recréer le projet.** Tu dois travailler sur le code existant, conserver les fonctionnalités correctement implémentées et améliorer leur qualité.
+
+---
+
+# 1. OBJECTIF GÉNÉRAL
+
+Amener OpenNDR V0.1 à un état :
+
+- fonctionnel ;
+- sécurisé ;
+- cohérent architecturalement ;
+- installable sur Debian 13 ;
+- administrable ;
+- testable ;
+- documenté ;
+- reproductible ;
+- prêt à accueillir les développements V0.2.
+
+La V0.1 doit constituer un socle technique fiable.
+
+Elle ne doit pas prétendre disposer de fonctionnalités qui ne sont pas encore développées.
+
+## Architecture cible
+
+- OS : Debian 13.
+- Backend : Python, FastAPI, Pydantic, SQLAlchemy.
+- Base de données : PostgreSQL.
+- Migrations : Alembic.
+- Frontend : React, TypeScript, Vite.
+- Moteur : Rust.
+- Services : systemd.
+- Communication : API REST et préparation du contrat IPC.
+- Stockage PCAP : fichiers locaux, jamais dans PostgreSQL.
+
+Le projet doit fonctionner localement, sans dépendance obligatoire à un service cloud, abonnement ou compte externe.
+
+---
+
+# 2. RÈGLES DE TRAVAIL OBLIGATOIRES
+
+Avant toute modification :
+
+1. Examiner l'intégralité de la structure du dépôt.
+2. Lire le README et la documentation.
+3. Examiner les dépendances Python, JavaScript et Rust.
+4. Examiner les modèles SQLAlchemy et les migrations Alembic.
+5. Examiner les routes API et les services.
+6. Examiner tous les composants frontend et leurs services.
+7. Examiner les scripts Debian et les unités systemd.
+8. Examiner les tests et la CI.
+9. Identifier les fonctionnalités réellement implémentées.
+10. Établir un rapport des écarts entre l'état existant et les objectifs de ce prompt.
+
+Ne jamais considérer une fonctionnalité comme opérationnelle simplement parce qu'un composant graphique ou une route existe.
+
+Ne pas supprimer une fonctionnalité fonctionnelle sans justification.
+
+Ne pas contourner les erreurs par des valeurs par défaut, des mocks ou des simulations.
+
+Ne pas masquer les exceptions importantes.
+
+Ne pas déclarer une opération réussie si elle n'a pas réellement été exécutée.
+
+Travailler par lots cohérents et vérifier chaque lot avant de passer au suivant.
+
+Mettre à jour les tests et la documentation en même temps que le code.
+
+---
+
+# 3. LOT 1 — REFONTE COMPLÈTE DE L'INTÉGRATION FRONTEND / BACKEND
+
+## Problème identifié
+
+Le fichier `src/services/api.ts` utilise encore des données simulées, des comptes de démonstration, une authentification locale et des opérations fictives.
+
+Cela doit être entièrement corrigé.
+
+## Travail demandé
+
+Refondre `src/services/api.ts` afin que le frontend communique réellement avec le backend FastAPI.
+
+Créer une couche API propre et centralisée.
+
+Prévoir :
+
+- client HTTP centralisé ;
+- gestion des erreurs ;
+- gestion des codes HTTP ;
+- typage TypeScript des réponses ;
+- gestion des délais d'attente ;
+- gestion des erreurs réseau ;
+- gestion des réponses invalides ;
+- gestion de l'expiration de session ;
+- déconnexion automatique lorsque la session n'est plus valide ;
+- configuration de l'URL de l'API par variable d'environnement ;
+- gestion cohérente des erreurs d'autorisation.
+
+Utiliser les routes FastAPI réellement disponibles.
+
+Ne jamais inventer une route sans l'implémenter également dans le backend.
+
+## Suppressions obligatoires
+
+Supprimer :
+
+- `INITIAL_USERS` ;
+- `INITIAL_SERVICES` ;
+- `INITIAL_INTERFACES` ;
+- `INITIAL_STORAGE` ;
+- `INITIAL_AUDIT_LOGS` ;
+- comptes administrateurs codés en dur ;
+- mots de passe de démonstration ;
+- session administrateur automatique ;
+- faux JWT ;
+- suffixe `simulated_sig` ;
+- authentification locale par comparaison de mots de passe ;
+- `switchRole()` ;
+- données métier simulées ;
+- opérations de redémarrage fictives ;
+- PID aléatoires ;
+- modifications d'interfaces purement locales ;
+- fausses statistiques ;
+- faux événements d'audit.
+
+Supprimer également les simulations cachées dans les autres composants React.
+
+Les données doivent provenir de l'API ou être explicitement présentées comme indisponibles.
+
+## Authentification frontend
+
+Le frontend doit utiliser exclusivement l'authentification réelle du backend.
+
+Implémenter :
+
+- écran de connexion ;
+- déconnexion réelle ;
+- récupération du profil utilisateur ;
+- affichage des permissions ;
+- gestion des sessions expirées ;
+- protection des routes ;
+- affichage adapté aux rôles ;
+- gestion des erreurs de connexion.
+
+Privilégier un stockage de session sécurisé.
+
+Si des JWT sont utilisés, privilégier des cookies HttpOnly, Secure et SameSite lorsque l'architecture le permet.
+
+Ne jamais stocker un mot de passe ou un secret sensible dans localStorage.
+
+Si une solution alternative est retenue, documenter précisément ses risques et ses protections.
+
+---
+
+# 4. LOT 2 — AUTHENTIFICATION ET SÉCURITÉ BACKEND
+
+## 4.1 Argon2id obligatoire
+
+Examiner :
+
+`backend/app/core/security.py`
+
+Argon2id doit être obligatoire en production.
+
+Supprimer tout fallback silencieux vers PBKDF2.
+
+Si la bibliothèque Argon2 est absente, le démarrage en production doit échouer clairement.
+
+Utiliser des paramètres Argon2id adaptés et configurables.
+
+Prévoir des tests vérifiant :
+
+- génération d'un hash Argon2id ;
+- vérification correcte du mot de passe ;
+- rejet d'un mauvais mot de passe ;
+- rejet d'un hash invalide ;
+- absence de stockage en clair ;
+- absence de fallback silencieux.
+
+## 4.2 JWT
+
+Revoir entièrement la génération et la validation des JWT.
+
+Utiliser une bibliothèque reconnue plutôt qu'une implémentation cryptographique artisanale.
+
+Contrôler explicitement :
+
+- algorithme autorisé ;
+- signature ;
+- expiration `exp` ;
+- date d'émission `iat` ;
+- identifiant `jti` ;
+- émetteur `iss` ;
+- audience `aud` ;
+- sujet `sub` ;
+- type de token ;
+- claims obligatoires.
+
+Refuser les tokens incomplets, expirés, mal formés ou signés avec un algorithme non autorisé.
+
+Les secrets doivent être suffisamment longs et fournis par configuration sécurisée.
+
+## 4.3 Révocation des tokens
+
+Supprimer le mécanisme de révocation uniquement en mémoire :
+
+`REVOKED_TOKENS`
+
+La révocation doit être persistante et partagée entre tous les workers.
+
+Créer si nécessaire un modèle SQLAlchemy pour les tokens révoqués.
+
+Prévoir :
+
+- révocation lors de la déconnexion ;
+- contrôle de révocation à chaque requête protégée ;
+- nettoyage des entrées expirées ;
+- gestion transactionnelle ;
+- tests avec plusieurs sessions ou workers.
+
+Une déconnexion doit invalider réellement le token.
+
+## 4.4 RBAC
+
+Vérifier le système de rôles et permissions.
+
+Rôles initiaux :
+
+- Administrateur ;
+- Analyste ;
+- Observateur.
+
+Vérifier que les permissions sont réellement appliquées côté backend.
+
+Le frontend ne doit jamais être considéré comme une barrière de sécurité.
+
+Tester notamment :
+
+- utilisateur non authentifié ;
+- utilisateur authentifié sans permission ;
+- analyste ;
+- observateur ;
+- administrateur.
+
+Un utilisateur ne doit jamais pouvoir s'attribuer lui-même un rôle supérieur.
+
+---
+
+# 5. LOT 3 — INITIALISATION DU PREMIER ADMINISTRATEUR
+
+Actuellement, aucun mécanisme de bootstrap fiable n'est démontré.
+
+Créer un mécanisme sécurisé d'initialisation du premier administrateur.
+
+Exigences :
+
+- commande CLI dédiée ;
+- exécution explicite par l'administrateur système ;
+- vérification qu'aucun administrateur n'existe déjà ;
+- génération ou saisie sécurisée du mot de passe ;
+- hash Argon2id ;
+- attribution du rôle administrateur ;
+- journalisation de l'opération ;
+- impossibilité de réinitialiser automatiquement le compte à chaque démarrage.
+
+Le bootstrap doit être à usage unique.
+
+Ne jamais créer un compte administrateur par défaut.
+
+Ne jamais intégrer un mot de passe dans le code source.
+
+Prévoir une commande documentée, par exemple :
+
+`openndr-admin create-first-admin`
+
+Adapter cette commande à l'architecture réelle du projet.
+
+## Création des utilisateurs
+
+Corriger également le problème de `UserService.create_user()`.
+
+Si un mot de passe temporaire est généré, il ne doit jamais être silencieusement supprimé par la route API.
+
+Prévoir un processus sécurisé :
+
+- invitation ou activation ;
+- génération d'un secret temporaire ;
+- affichage unique si nécessaire ;
+- expiration du secret ;
+- changement obligatoire du mot de passe à la première connexion.
+
+Ne jamais retourner un mot de passe dans les logs.
+
+---
+
+# 6. LOT 4 — CONFIGURATION ET BASE DE DONNÉES
+
+## 6.1 Configuration de production
+
+Examiner :
+
+`backend/app/core/config.py`
+
+Supprimer les identifiants PostgreSQL codés en dur.
+
+En production :
+
+- `DATABASE_URL` doit être obligatoire ;
+- `SECRET_KEY` doit être obligatoire ;
+- les secrets par défaut doivent être refusés ;
+- les valeurs d'exemple ne doivent jamais être utilisées automatiquement ;
+- les paramètres sensibles doivent provenir de variables d'environnement ou d'un fichier protégé.
+
+Créer un véritable fichier :
+
+`deployment/configuration/backend.env.example`
+
+Documenter chaque variable.
+
+Ne jamais versionner un véritable fichier de secrets.
+
+## 6.2 PostgreSQL
+
+Vérifier :
+
+- connexion ;
+- pool SQLAlchemy ;
+- gestion des sessions ;
+- transactions ;
+- erreurs de connexion ;
+- reconnexion ;
+- readiness ;
+- permissions du compte PostgreSQL.
+
+Créer un compte PostgreSQL dédié à OpenNDR.
+
+Ne pas utiliser le compte PostgreSQL `postgres` pour le fonctionnement normal de l'application.
+
+## 6.3 Alembic exclusivement
+
+Examiner :
+
+`backend/app/main.py`
+
+Supprimer l'appel à :
+
+`Base.metadata.create_all(bind=engine)`
+
+Alembic doit être l'unique mécanisme de création et d'évolution du schéma en production.
+
+Ne pas masquer les erreurs de migration.
+
+Au démarrage ou lors de l'installation :
+
+- vérifier la connexion DB ;
+- vérifier l'état des migrations ;
+- appliquer les migrations selon une procédure explicite ;
+- interrompre le déploiement en cas d'échec ;
+- ne jamais démarrer un service en prétendant que la base est opérationnelle alors qu'elle ne l'est pas.
+
+Prévoir des tests de migration sur une base PostgreSQL réelle.
+
+---
+
+# 7. LOT 5 — JOURNALISATION ET AUDIT
+
+Examiner :
+
+- `backend/app/services/audit_service.py`
+- `backend/app/models/audit.py`
+
+Les événements d'audit doivent être persistés.
+
+Les actions critiques ne doivent jamais réussir silencieusement lorsque leur journalisation obligatoire échoue.
+
+Mettre en place une stratégie transactionnelle cohérente.
+
+Prévoir les événements suivants :
+
+- connexion ;
+- échec de connexion ;
+- déconnexion ;
+- création d'utilisateur ;
+- modification d'utilisateur ;
+- suppression d'utilisateur ;
+- modification de rôle ;
+- changement de configuration ;
+- opération d'administration ;
+- modification des interfaces ;
+- opérations sensibles.
+
+Les événements doivent contenir au minimum :
+
+- identifiant ;
+- date UTC ;
+- utilisateur ;
+- action ;
+- ressource concernée ;
+- résultat ;
+- adresse IP lorsque disponible ;
+- métadonnées non sensibles.
+
+## Immutabilité
+
+Mettre en place une stratégie append-only adaptée.
+
+Un utilisateur applicatif ne doit pas pouvoir modifier ou supprimer les événements existants.
+
+Si une protection PostgreSQL supplémentaire est nécessaire, l'implémenter.
+
+Ne pas prétendre à une immutabilité absolue si elle n'est pas garantie contre un administrateur système ou un superutilisateur PostgreSQL.
+
+Documenter exactement le niveau de protection réellement fourni.
+
+Ne jamais journaliser :
+
+- mots de passe ;
+- tokens complets ;
+- secrets ;
+- données d'authentification sensibles.
+
+---
+
+# 8. LOT 6 — ÉTAT RÉEL DU SYSTÈME
+
+Examiner :
+
+`backend/app/api/v1/system.py`
+
+Supprimer les statuts codés en dur.
+
+Les informations affichées dans l'interface doivent correspondre à l'état réel.
+
+Prévoir des mécanismes de vérification adaptés pour :
+
+- backend ;
+- PostgreSQL ;
+- moteur Rust ;
+- frontend ;
+- stockage ;
+- interfaces réseau ;
+- espace disque ;
+- mémoire ;
+- CPU ;
+- services systemd.
+
+Ne pas permettre au backend de redémarrer arbitrairement des services via des commandes shell non contrôlées.
+
+Pour les opérations système, utiliser un mécanisme limité et sécurisé :
+
+- permissions minimales ;
+- commandes autorisées explicitement ;
+- validation des paramètres ;
+- absence de shell libre ;
+- journalisation ;
+- contrôle des erreurs.
+
+Les services non implémentés doivent être présentés comme indisponibles ou non installés, jamais comme opérationnels.
+
+## Santé du moteur Rust
+
+Ne pas se contenter de vérifier l'existence d'un socket IPC.
+
+Prévoir un véritable mécanisme de health check lorsque le moteur existe.
+
+Si le moteur est encore en attente de V0.2, afficher clairement :
+
+`Engine: not implemented / standby`
+
+Ne pas annoncer une capture opérationnelle.
+
+---
+
+# 9. LOT 7 — MOTEUR RUST V0.1
+
+Examiner le workspace Rust.
+
+Créer une structure cohérente avec l'architecture cible.
+
+Si nécessaire, créer une crate binaire :
+
+`openndr-engine`
+
+Elle doit produire un exécutable réellement compilable.
+
+Pour V0.1, cet exécutable peut se limiter à :
+
+- démarrage ;
+- lecture de configuration ;
+- journalisation ;
+- initialisation des modules ;
+- health check ;
+- préparation du contrat IPC ;
+- arrêt propre ;
+- gestion des signaux.
+
+Ne pas implémenter la capture réseau réelle dans ce lot.
+
+Ne pas simuler de paquets capturés.
+
+Ne pas inventer de compteurs de trafic.
+
+Les statistiques non disponibles doivent être nulles ou explicitement marquées indisponibles, et non calculées artificiellement.
+
+Créer un contrat IPC versionné et documenté entre backend Python et moteur Rust.
+
+Prévoir les messages nécessaires pour :
+
+- health ;
+- status ;
+- configuration ;
+- shutdown ;
+- erreurs.
+
+Les commandes doivent être validées et versionnées.
+
+Sécuriser les permissions du socket Unix.
+
+---
+
+# 10. LOT 8 — INSTALLATION DEBIAN 13
+
+C'est un lot prioritaire.
+
+Examiner l'ensemble du répertoire :
+
+`deployment/debian/`
+
+L'installation actuelle ne doit plus se contenter de copier quelques fichiers et d'afficher un message de succès.
+
+Créer un véritable installateur Debian 13.
+
+## 10.1 Pré-vérifications
+
+Le script doit vérifier réellement :
+
+- système Debian 13 ;
+- droits root ;
+- architecture CPU supportée ;
+- nombre de cœurs ;
+- mémoire ;
+- espace disque ;
+- interfaces réseau ;
+- Python ;
+- PostgreSQL ;
+- Node.js ;
+- npm ;
+- Rust et Cargo ;
+- systemd.
+
+Les exigences minimales doivent être cohérentes avec les messages affichés.
+
+Les exigences indispensables doivent bloquer l'installation.
+
+Les recommandations non bloquantes doivent être signalées clairement.
+
+Ne pas accepter silencieusement une distribution non supportée.
+
+## 10.2 Dépendances
+
+Installer ou vérifier les dépendances nécessaires :
+
+- Python ;
+- venv ;
+- PostgreSQL ;
+- outils de compilation ;
+- Node.js ;
+- npm ;
+- Rust/Cargo si nécessaire ;
+- bibliothèques système requises.
+
+Ne pas télécharger ou exécuter de scripts distants non vérifiés.
+
+Privilégier les dépôts Debian et les sources officielles.
+
+## 10.3 Installation backend
+
+L'installateur doit :
+
+1. créer l'utilisateur système OpenNDR ;
+2. créer les groupes nécessaires ;
+3. créer les répertoires ;
+4. copier les sources ou artefacts ;
+5. créer le virtualenv ;
+6. installer les dépendances Python ;
+7. installer la configuration ;
+8. protéger les fichiers sensibles ;
+9. configurer PostgreSQL ;
+10. appliquer les migrations Alembic ;
+11. installer les unités systemd.
+
+## 10.4 Installation frontend
+
+Le dépôt contient actuellement le frontend à la racine.
+
+Ne pas supposer l'existence d'un répertoire `frontend/` sans avoir réellement réorganisé le projet.
+
+Choisir une stratégie cohérente :
+
+- build Vite ;
+- publication des fichiers statiques ;
+- serveur web adapté, par exemple Nginx.
+
+Ne pas utiliser un `server.js` inexistant.
+
+Si Nginx est retenu :
+
+- créer la configuration ;
+- servir les fichiers `dist/` ;
+- configurer le reverse proxy API ;
+- gérer les routes SPA ;
+- documenter HTTPS ;
+- limiter l'exposition réseau.
+
+## 10.5 Installation moteur Rust
+
+Compiler réellement le binaire.
+
+Vérifier qu'il existe avant de créer ou démarrer le service systemd.
+
+Ne jamais installer une unité systemd pointant vers un exécutable inexistant.
+
+## 10.6 Configuration
+
+Créer :
+
+- configuration OpenNDR ;
+- configuration backend ;
+- configuration frontend ;
+- configuration PostgreSQL ;
+- configuration systemd.
+
+Protéger les secrets et les fichiers sensibles.
+
+## 10.7 Démarrage et vérification
+
+Après installation :
+
+- recharger systemd ;
+- activer les services ;
+- démarrer les services disponibles ;
+- contrôler leurs statuts ;
+- interroger les health checks ;
+- vérifier PostgreSQL ;
+- vérifier l'API ;
+- vérifier le frontend ;
+- vérifier le moteur si installé.
+
+Le message de succès ne doit être affiché que si toutes les étapes obligatoires ont réussi.
+
+Si une étape échoue :
+
+- afficher précisément l'erreur ;
+- conserver des logs exploitables ;
+- retourner un code de sortie non nul ;
+- ne pas déclarer l'installation réussie.
+
+## 10.8 Idempotence
+
+L'installation doit pouvoir être relancée sans :
+
+- dupliquer les comptes ;
+- écraser les secrets ;
+- perdre les données ;
+- détruire la configuration existante ;
+- créer des doublons systemd ;
+- corrompre la base.
+
+Prévoir une sauvegarde avant toute opération destructive.
+
+---
+
+# 11. LOT 9 — SERVICES SYSTEMD
+
+Revoir toutes les unités :
+
+- `openndr-backend.service`
+- `openndr-engine.service`
+- `openndr-web.service`
+
+Aligner les chemins avec la véritable structure installée.
+
+Utiliser les utilisateurs système dédiés.
+
+Configurer :
+
+- Restart ;
+- RestartSec ;
+- TimeoutStartSec ;
+- TimeoutStopSec ;
+- WorkingDirectory ;
+- EnvironmentFile ;
+- permissions ;
+- restrictions de sécurité ;
+- journaux systemd.
+
+Activer les protections adaptées :
+
+- NoNewPrivileges ;
+- PrivateTmp ;
+- ProtectSystem ;
+- ProtectHome ;
+- RestrictSUIDSGID ;
+- CapabilityBoundingSet minimal ;
+- ReadWritePaths strictement nécessaires.
+
+Ne pas accorder des privilèges root au backend pour faciliter artificiellement les opérations.
+
+La capture réseau nécessitera une stratégie de permissions spécifique dans une version ultérieure.
+
+---
+
+# 12. LOT 10 — NETTOYAGE DES FICHIERS ET DES SECRETS
+
+Examiner le dépôt et son historique.
+
+Un fichier `openndr.db` est actuellement présent à la racine du dépôt.
+
+Déterminer s'il s'agit d'un artefact de développement.
+
+Si cette base n'a pas vocation à être versionnée :
+
+- la retirer du dépôt ;
+- ajouter les exclusions nécessaires ;
+- vérifier qu'aucune donnée sensible n'est présente ;
+- documenter la procédure.
+
+Compléter `.gitignore` avec au minimum :
+
+`*.db`
+`*.sqlite`
+`*.sqlite3`
+`*.db-journal`
+`.env`
+`.env.*`
+`!.env.example`
+`*.pyc`
+`__pycache__/`
+`.venv/`
+`node_modules/`
+`dist/`
+`build/`
+`target/`
+`coverage/`
+`*.log`
+
+Examiner l'historique Git pour rechercher :
+
+- mots de passe ;
+- tokens ;
+- clés privées ;
+- secrets JWT ;
+- identifiants PostgreSQL ;
+- fichiers de configuration sensibles.
+
+Ne pas modifier l'historique destructivement sans autorisation.
+
+Si un secret a été exposé, le signaler et proposer sa rotation.
+
+---
+
+# 13. LOT 11 — CI ET QUALITÉ LOGICIELLE
+
+Revoir :
+
+`.github/workflows/ci.yml`
+
+La CI doit vérifier les trois parties du projet.
+
+## Backend Python
+
+- version Python compatible Debian 13 ;
+- installation propre ;
+- Ruff ;
+- vérification du typage si configurée ;
+- tests unitaires ;
+- tests API ;
+- tests sécurité ;
+- tests RBAC ;
+- tests JWT ;
+- tests Argon2id ;
+- tests migrations ;
+- tests PostgreSQL.
+
+Utiliser un service PostgreSQL dans les tests d'intégration.
+
+Ne pas se limiter à SQLite pour valider le comportement PostgreSQL.
+
+## Frontend
+
+- npm ci ;
+- lint ;
+- vérification TypeScript ;
+- tests unitaires ;
+- tests composants ;
+- tests de l'intégration API ;
+- build Vite.
+
+Les tests ne doivent pas être de simples fonctions qui renvoient systématiquement `passed`.
+
+## Rust
+
+Ajouter :
+
+- cargo fmt --check ;
+- cargo clippy ;
+- cargo test ;
+- cargo build --release.
+
+## Installation
+
+Ajouter des tests automatisés adaptés pour :
+
+- pré-vérifications ;
+- scripts d'installation ;
+- idempotence ;
+- vérification des chemins ;
+- présence des artefacts ;
+- cohérence systemd.
+
+Si une VM Debian 13 est nécessaire pour les tests complets, le documenter et prévoir un test de smoke test sur cette plateforme.
+
+La CI ne doit jamais masquer un échec.
+
+---
+
+# 14. LOT 12 — TESTS FONCTIONNELS ET DE SÉCURITÉ
+
+Créer une suite de tests réelle.
+
+## Authentification
+
+- connexion valide ;
+- mauvais mot de passe ;
+- utilisateur désactivé ;
+- token expiré ;
+- token invalide ;
+- token révoqué ;
+- déconnexion ;
+- renouvellement si prévu.
+
+## Autorisations
+
+- accès administrateur ;
+- accès analyste ;
+- accès observateur ;
+- tentative d'escalade de privilèges ;
+- accès à une ressource interdite.
+
+## Base de données
+
+- connexion PostgreSQL ;
+- migrations ;
+- rollback ;
+- contraintes ;
+- transactions ;
+- persistance ;
+- audit.
+
+## API
+
+- endpoints de santé ;
+- endpoints auth ;
+- endpoints utilisateurs ;
+- endpoints système ;
+- codes HTTP ;
+- validation Pydantic ;
+- erreurs.
+
+## Frontend
+
+- connexion API ;
+- affichage des données réelles ;
+- erreurs réseau ;
+- expiration session ;
+- permissions ;
+- absence de données simulées.
+
+## Tests négatifs
+
+Tester également les comportements en cas de :
+
+- PostgreSQL indisponible ;
+- migration échouée ;
+- backend inaccessible ;
+- moteur arrêté ;
+- configuration invalide ;
+- secret manquant ;
+- absence de permission ;
+- erreur d'audit.
+
+Une fonctionnalité non testée ne doit pas être annoncée comme validée.
+
+---
+
+# 15. LOT 13 — README ET DOCUMENTATION
+
+Corriger le README pour qu'il corresponde exactement au dépôt.
+
+L'URL GitHub doit être :
+
+https://github.com/sheriffhomard/OpenNDROR
+
+Ne pas documenter un répertoire `frontend/` s'il n'existe pas.
+
+Créer ou actualiser les documents suivants :
+
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `docs/INSTALLATION_DEBIAN_13.md`
+- `docs/CONFIGURATION.md`
+- `docs/SECURITY.md`
+- `docs/API.md`
+- `docs/DATABASE.md`
+- `docs/DEVELOPMENT.md`
+- `docs/TESTING.md`
+- `docs/ROADMAP.md`
+- `docs/TROUBLESHOOTING.md`
+
+Documenter :
+
+- architecture réelle ;
+- dépendances ;
+- configuration ;
+- installation ;
+- démarrage ;
+- arrêt ;
+- mise à jour ;
+- sauvegarde ;
+- restauration ;
+- désinstallation ;
+- utilisateurs ;
+- rôles ;
+- permissions ;
+- API ;
+- journaux ;
+- limites connues.
+
+## Présentation honnête des fonctionnalités
+
+Distinguer explicitement :
+
+- implémenté et testé ;
+- implémenté mais non testé ;
+- partiellement implémenté ;
+- prévu ultérieurement ;
+- non implémenté.
+
+Ne pas annoncer comme opérationnelles les fonctions suivantes tant qu'elles ne sont pas développées :
+
+- capture réseau réelle ;
+- décodage de paquets ;
+- analyse de flux ;
+- DPI ;
+- analyse des protocoles ;
+- détection ;
+- corrélation ;
+- Threat Intelligence ;
+- investigation réseau avancée.
+
+---
+
+# 16. LOT 14 — LICENCES ET CONFORMITÉ
+
+Vérifier la licence principale du projet.
+
+Si AGPL-3.0 est retenue :
+
+- ajouter le fichier LICENSE complet ;
+- vérifier les licences des dépendances ;
+- identifier les composants incompatibles ;
+- documenter les obligations de redistribution ;
+- ne pas déclarer une conformité juridique définitive sans analyse suffisante.
+
+Ajouter si nécessaire :
+
+- inventaire des dépendances ;
+- génération SBOM ;
+- vérification automatisée des licences ;
+- vérification des vulnérabilités des dépendances.
+
+Ne pas ajouter de dépendances inutiles.
+
+---
+
+# 17. LIMITES STRICTES DE LA V0.1
+
+Ne pas implémenter dans ce lot :
+
+- capture réseau réelle ;
+- décodage des paquets ;
+- moteur de flux ;
+- DPI ;
+- analyse protocolaire ;
+- détection d'anomalies ;
+- corrélation ;
+- Threat Intelligence ;
+- analyse comportementale ;
+- investigation avancée ;
+- stockage PCAP opérationnel.
+
+Ces fonctionnalités appartiennent aux versions suivantes.
+
+La V0.1 doit uniquement fournir des fondations fiables.
+
+Le moteur Rust peut être présent sous forme de service minimal en attente de V0.2, mais son état doit être affiché honnêtement.
+
+---
+
+# 18. ORGANISATION DU TRAVAIL
+
+Procéder par lots dans cet ordre :
+
+1. Audit initial et rapport des écarts.
+2. Suppression des simulations frontend.
+3. Intégration réelle frontend/backend.
+4. Sécurisation authentification et JWT.
+5. Bootstrap administrateur.
+6. Configuration PostgreSQL et migrations Alembic.
+7. Audit logs.
+8. État réel des services.
+9. Moteur Rust minimal.
+10. Installation Debian 13.
+11. Services systemd.
+12. Nettoyage Git et secrets.
+13. CI complète.
+14. Tests.
+15. Documentation.
+16. Vérification finale.
+
+Après chaque lot :
+
+- exécuter les tests correspondants ;
+- corriger les régressions ;
+- vérifier le fonctionnement ;
+- mettre à jour la documentation ;
+- enregistrer les résultats.
+
+Ne pas passer au lot suivant si un problème bloquant est découvert sans l'avoir corrigé ou explicitement documenté.
+
+Ne pas créer de fonctionnalités factices pour satisfaire artificiellement les tests.
+
+---
+
+# 19. CRITÈRES D'ACCEPTATION V0.1
+
+La V0.1 ne peut être considérée comme terminée que si tous les critères obligatoires suivants sont remplis.
+
+| Domaine | Critère |
+|---|---|
+| Frontend | Aucune donnée métier simulée |
+| API | Communication réelle avec FastAPI |
+| Authentification | Authentification backend fonctionnelle |
+| Mots de passe | Argon2id obligatoire en production |
+| JWT | Validation complète et robuste |
+| Révocation | Persistante et partagée |
+| RBAC | Contrôles backend effectifs |
+| Bootstrap | Premier administrateur créé de manière sécurisée |
+| PostgreSQL | Connexion et persistance opérationnelles |
+| Alembic | Migrations exclusivement gérées par Alembic |
+| Audit | Événements persistés et protection documentée |
+| Systemd | Statut réel des services |
+| Rust | Binaire minimal compilable ou service explicitement désactivé |
+| Debian | Installation complète et reproductible |
+| Frontend | Build et publication fonctionnels |
+| CI | Python, frontend, Rust et PostgreSQL testés |
+| Tests | Tests réels, sans succès artificiel |
+| Git | Aucun secret ni base locale versionnée |
+| Documentation | Cohérente avec le code réel |
+| Sécurité | Aucun secret par défaut en production |
+
+Un critère obligatoire non rempli interdit de déclarer la V0.1 validée.
+
+---
+
+# 20. RAPPORT FINAL OBLIGATOIRE
+
+À la fin, fournir un rapport détaillé.
+
+## A. État initial
+
+- problèmes identifiés ;
+- fichiers concernés ;
+- risques.
+
+## B. Modifications réalisées
+
+Pour chaque lot :
+
+- fichiers créés ;
+- fichiers modifiés ;
+- fichiers supprimés ;
+- modifications architecturales ;
+- décisions techniques.
+
+## C. Tests
+
+Fournir un tableau :
+
+| Test | Commande | Résultat | Preuve |
+|---|---|---|---|
+| Backend | commande exécutée | PASS/FAIL | logs |
+| Frontend | commande exécutée | PASS/FAIL | logs |
+| Rust | commande exécutée | PASS/FAIL | logs |
+| PostgreSQL | commande exécutée | PASS/FAIL | logs |
+| Migrations | commande exécutée | PASS/FAIL | logs |
+| Sécurité | commande exécutée | PASS/FAIL | logs |
+| Installation Debian | commande exécutée | PASS/FAIL/NON TESTÉ | logs |
+
+Ne jamais inventer un résultat de test.
+
+Distinguer clairement les tests exécutés, ceux qui ont échoué et ceux qui n'ont pas pu être exécutés.
+
+## D. Points restant à traiter
+
+Lister tous les défauts résiduels et leurs conséquences.
+
+## E. Verdict
+
+Choisir obligatoirement l'un des trois verdicts :
+
+- **V0.1 VALIDÉE** : tous les critères obligatoires sont remplis et testés.
+- **V0.1 PARTIELLEMENT VALIDÉE** : des éléments restent à corriger ou à tester.
+- **V0.1 NON VALIDÉE** : des problèmes bloquants subsistent.
+
+Justifier le verdict.
+
+## F. Préparation V0.2
+
+Présenter uniquement les prérequis techniques pour commencer V0.2.
+
+Ne pas commencer son développement dans ce lot.
+
+---
+
+# CONSIGNE FINALE
+
+La priorité absolue est la fiabilité.
+
+Je préfère une V0.1 limitée, mais réellement fonctionnelle, à une application qui affiche des fonctionnalités avancées non implémentées.
+
+Ne masque aucune lacune.
+
+Ne simule aucune fonctionnalité.
+
+Ne déclare jamais un test réussi sans l'avoir exécuté.
+
+Ne considère jamais un service comme opérationnel simplement parce qu'il existe dans un fichier de configuration.
+
+**Le résultat attendu est une véritable fondation logicielle OpenNDR, installable, sécurisée, testable et prête à évoluer vers la capture réseau V0.2.**

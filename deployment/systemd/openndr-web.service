@@ -1,16 +1,16 @@
 [Unit]
 Description=OpenNDR Web Frontend Application
-Documentation=https://github.com/openndr/openndr
+Documentation=https://github.com/sheriffhomard/OpenNDROR
 After=network.target openndr-backend.service
 
 [Service]
 Type=simple
 User=openndr
 Group=openndr
-WorkingDirectory=/opt/openndr/frontend
+WorkingDirectory=/opt/openndr
 Environment=PORT=3000
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node server.js
+ExecStart=/usr/local/bin/npx serve -s dist -l 3000
 Restart=always
 RestartSec=5s
 

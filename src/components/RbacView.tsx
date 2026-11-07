@@ -7,14 +7,21 @@ import {
   X,
   Lock,
   AlertCircle,
+  Copy,
+  CheckCheck,
 } from 'lucide-react';
 import { User, UserRole, PermissionCode } from '../types/auth';
 
 interface RbacViewProps {
   users: User[];
   canManageUsers: boolean;
-  onToggleUserActive: (userId: string) => void;
-  onCreateUser: (data: { email: string; fullName: string; role: UserRole }) => void;
+  onToggleUserActive: (userId: string) => Promise<void>;
+  onCreateUser: (data: {
+    email: string;
+    fullName: string;
+    role: UserRole;
+    password?: string;
+  }) => Promise<{ user: User; temporaryPassword?: string }>;
 }
 
 export const RbacView: React.FC<RbacViewProps> = ({
@@ -27,9 +34,22 @@ export const RbacView: React.FC<RbacViewProps> = ({
   const [newEmail, setNewEmail] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('Analyst');
+  const [customPassword, setCustomPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    email: string;
+    tempPass: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const permissionMatrix: { code: PermissionCode; label: string; module: string; admin: boolean; analyst: boolean; observer: boolean }[] = [
+  const permissionMatrix: {
+    code: PermissionCode;
+    label: string;
+    module: string;
+    admin: boolean;
+    analyst: boolean;
+    observer: boolean;
+  }[] = [
     { code: 'system:view', label: 'Consulter l’état système et les métriques', module: 'Système', admin: true, analyst: true, observer: true },
     { code: 'system:manage', label: 'Gérer les services et redémarrer les démons', module: 'Système', admin: true, analyst: false, observer: false },
     { code: 'interfaces:view', label: 'Consulter la configuration réseau', module: 'Réseau', admin: true, analyst: true, observer: true },
@@ -40,20 +60,40 @@ export const RbacView: React.FC<RbacViewProps> = ({
     { code: 'storage:manage', label: 'Modifier les politiques de rétention PCAP', module: 'Stockage', admin: true, analyst: false, observer: false },
   ];
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     try {
       if (!newEmail || !newFullName) {
         throw new Error('Veuillez renseigner tous les champs obligatoires.');
       }
-      onCreateUser({ email: newEmail, fullName: newFullName, role: newRole });
+      const res = await onCreateUser({
+        email: newEmail.trim(),
+        fullName: newFullName.trim(),
+        role: newRole,
+        password: customPassword ? customPassword.trim() : undefined,
+      });
+
       setIsModalOpen(false);
       setNewEmail('');
       setNewFullName('');
+      setCustomPassword('');
+
+      if (res && res.temporaryPassword) {
+        setCreatedCredentials({
+          email: res.user.email,
+          tempPass: res.temporaryPassword,
+        });
+      }
     } catch (err: unknown) {
       if (err instanceof Error) setErrorMsg(err.message);
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
@@ -65,7 +105,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
             <h2 className="text-sm font-semibold text-slate-100">Contrôle d'Accès Basé sur les Rôles (RBAC)</h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
               Séparation stricte des privilèges : Administrator, Analyst et Observer.
-              Toutes les permissions sont validées côté serveur à chaque requête API.
+              Toutes les permissions sont validées côté serveur PostgreSQL à chaque requête API.
             </p>
           </div>
           {canManageUsers && (
@@ -80,6 +120,36 @@ export const RbacView: React.FC<RbacViewProps> = ({
         </div>
       </div>
 
+      {/* One-time Temporary Password Alert Modal */}
+      {createdCredentials && (
+        <div className="p-4 bg-emerald-950/70 border border-emerald-500/50 rounded-xl space-y-2 text-xs">
+          <div className="flex items-center justify-between text-emerald-300 font-semibold">
+            <span>Compte créé avec succès dans PostgreSQL !</span>
+            <button
+              onClick={() => setCreatedCredentials(null)}
+              className="text-slate-400 hover:text-slate-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-slate-300">
+            Un mot de passe temporaire unique a été généré pour{' '}
+            <strong className="text-white font-mono">{createdCredentials.email}</strong>.
+            Ce mot de passe ne sera plus jamais réaffiché :
+          </p>
+          <div className="flex items-center gap-2 p-2 bg-slate-900 border border-slate-800 rounded font-mono text-emerald-400">
+            <span className="flex-1 font-semibold select-all">{createdCredentials.tempPass}</span>
+            <button
+              onClick={() => copyToClipboard(createdCredentials.tempPass)}
+              className="p-1 text-slate-400 hover:text-slate-200 rounded"
+              title="Copier le mot de passe"
+            >
+              {copied ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Users Directory Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
@@ -87,7 +157,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
             <Users className="w-4 h-4 text-emerald-400" />
             <h3 className="text-xs font-semibold text-slate-200">Annuaire des Utilisateurs de la Sonde</h3>
           </div>
-          <span className="text-xs text-slate-400 font-mono">{users.length} comptes actifs</span>
+          <span className="text-xs text-slate-400 font-mono">{users.length} comptes réels</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -112,10 +182,10 @@ export const RbacView: React.FC<RbacViewProps> = ({
                     <span
                       className={`inline-flex items-center gap-1 font-mono px-2 py-0.5 rounded text-xs ${
                         user.role === 'Administrator'
-                          ? 'bg-purple-950 text-purple-300 border border-purple-800/40'
+                          ? 'bg-rose-950/80 text-rose-300 border border-rose-800/40'
                           : user.role === 'Analyst'
-                          ? 'bg-sky-950 text-sky-300 border border-sky-800/40'
-                          : 'bg-slate-800 text-slate-300'
+                          ? 'bg-amber-950/80 text-amber-300 border border-amber-800/40'
+                          : 'bg-blue-950/80 text-blue-300 border border-blue-800/40'
                       }`}
                     >
                       <Shield className="w-3 h-3" />
@@ -137,7 +207,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {canManageUsers && user.email !== 'admin@openndr.local' ? (
+                    {canManageUsers ? (
                       <button
                         onClick={() => onToggleUserActive(user.id)}
                         className="text-xs text-slate-400 hover:text-slate-200 underline font-medium"
@@ -238,12 +308,12 @@ export const RbacView: React.FC<RbacViewProps> = ({
               <div>
                 <label className="block text-slate-300 mb-1 font-medium">Adresse E-mail</label>
                 <input
-                  type="email"
+                  type="text"
                   required
                   placeholder="analyste@openndr.local"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
                 />
               </div>
 
@@ -255,7 +325,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
                   placeholder="Ex: Jean Dupont (SOC Analyst)"
                   value={newFullName}
                   onChange={(e) => setNewFullName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 text-xs"
                 />
               </div>
 
@@ -264,7 +334,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
                 <select
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
                 >
                   <option value="Administrator">Administrator (Gestion intégrale)</option>
                   <option value="Analyst">Analyst (Investigation & Audit)</option>
@@ -272,11 +342,24 @@ export const RbacView: React.FC<RbacViewProps> = ({
                 </select>
               </div>
 
+              <div>
+                <label className="block text-slate-300 mb-1 font-medium">
+                  Mot de passe (optionnel - généré aléatoirement si vide)
+                </label>
+                <input
+                  type="password"
+                  placeholder="Min. 12 car, maj, min, chif, spec"
+                  value={customPassword}
+                  onChange={(e) => setCustomPassword(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+                />
+              </div>
+
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 flex items-start gap-2">
                 <Lock className="w-3.5 h-3.5 mt-0.5 text-emerald-400 shrink-0" />
                 <span>
-                  Un mot de passe temporaire conforme aux exigences de sécurité (Argon2id) sera généré
-                  pour ce compte.
+                  Hachage cryptographique Argon2id conforme. Si laissé vide, un mot de passe temporaire robuste
+                  sera généré et affiché une seule fois.
                 </span>
               </div>
 

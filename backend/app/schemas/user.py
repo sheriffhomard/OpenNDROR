@@ -48,3 +48,8 @@ class UserOut(BaseModel):
     is_active: bool
     created_at: datetime
     last_login_at: Optional[datetime] = None
+
+
+class UserCreateResponse(UserOut):
+    temporary_password: Optional[str] = None
+

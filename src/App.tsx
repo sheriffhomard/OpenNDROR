@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { Navigation, TabId } from './components/Navigation';
 import { DashboardView } from './components/DashboardView';
@@ -10,138 +10,143 @@ import { DocsView } from './components/DocsView';
 import { LoginModal } from './components/LoginModal';
 import { apiService } from './services/api';
 import { User, UserRole } from './types/auth';
-import { SystemService, NetworkInterfaceConfig, StorageMetrics, AuditLogItem } from './types/system';
+import {
+  SystemService,
+  NetworkInterfaceConfig,
+  StorageMetrics,
+  AuditLogItem,
+} from './types/system';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(apiService.getCurrentUser());
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [services, setServices] = useState<SystemService[]>([]);
   const [interfaces, setInterfaces] = useState<NetworkInterfaceConfig[]>([]);
-  const [storage, setStorage] = useState<StorageMetrics>(apiService.getStorageMetrics());
+  const [storage, setStorage] = useState<StorageMetrics | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Synchronise state from apiService
-  const refreshData = () => {
-    const session = apiService.getCurrentSession();
-    setCurrentUser(session ? session.user : null);
-    setServices(apiService.getServices());
-    setInterfaces(apiService.getInterfaces());
-    setStorage(apiService.getStorageMetrics());
-
-    try {
-      if (apiService.hasPermission('users:view')) {
-        setUsers(apiService.getUsers());
-      }
-    } catch {
-      setUsers([]);
-    }
-
-    try {
-      if (apiService.hasPermission('audit:view')) {
-        setAuditLogs(apiService.getAuditLogs());
-      }
-    } catch {
-      setAuditLogs([]);
-    }
-  };
-
-  useEffect(() => {
-    refreshData();
-    const interval = setInterval(() => {
-      setServices(apiService.getServices());
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
   const showToast = (type: 'success' | 'error', text: string) => {
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Handlers
-  const handleSwitchRole = (role: UserRole) => {
+  // Synchronise les données depuis l'API FastAPI réelle
+  const refreshData = useCallback(async () => {
     try {
-      apiService.switchRole(role);
-      refreshData();
-      showToast('success', `Session basculée sur le rôle ${role}`);
-    } catch (err: unknown) {
-      if (err instanceof Error) showToast('error', err.message);
+      const statusData = await apiService.getSystemStatus();
+      setServices(statusData.services || []);
+    } catch {
+      // Ignorer si le backend n'a pas encore répondu
     }
-  };
 
-  const handleLogin = (email: string, pass: string) => {
     try {
-      apiService.login(email, pass);
+      const ifaces = await apiService.getInterfaces();
+      setInterfaces(ifaces);
+    } catch {
+      // Ignorer si non disponible
+    }
+
+    try {
+      const stor = await apiService.getStorageMetrics();
+      setStorage(stor);
+    } catch {
+      // Ignorer si non disponible
+    }
+
+    if (apiService.hasPermission('users:view')) {
+      try {
+        const uList = await apiService.getUsers();
+        setUsers(uList);
+      } catch {
+        setUsers([]);
+      }
+    } else {
+      setUsers([]);
+    }
+
+    if (apiService.hasPermission('audit:view')) {
+      try {
+        const logs = await apiService.getAuditLogs(50, 0);
+        setAuditLogs(logs);
+      } catch {
+        setAuditLogs([]);
+      }
+    } else {
+      setAuditLogs([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    // S'abonne aux changements d'authentification
+    const unsubscribe = apiService.onAuthStateChange((user) => {
+      setCurrentUser(user);
       refreshData();
+    });
+
+    refreshData();
+    const interval = setInterval(refreshData, 10000);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [refreshData]);
+
+  const handleLogin = async (email: string, pass: string) => {
+    try {
+      await apiService.login(email, pass);
+      await refreshData();
       showToast('success', 'Authentification SOC réussie');
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        showToast('error', err.message);
-        throw err;
-      }
+      const msg = err instanceof Error ? err.message : "Erreur d'authentification";
+      showToast('error', msg);
+      throw err;
     }
   };
 
-  const handleLogout = () => {
-    apiService.logout();
-    refreshData();
-    showToast('success', 'Déconnexion effectuée');
-  };
-
-  const handleRestartService = (unit: string) => {
+  const handleLogout = async () => {
     try {
-      apiService.restartService(unit);
-      refreshData();
-      showToast('success', `Ordre de redémarrage envoyé à systemd pour ${unit}`);
-    } catch (err: unknown) {
-      if (err instanceof Error) showToast('error', err.message);
+      await apiService.logout();
+      await refreshData();
+      showToast('success', 'Session déconnectée et jeton JWT révoqué');
+    } catch {
+      showToast('success', 'Déconnexion effectuée');
     }
   };
 
-  const handleSimulateViolation = (name: string, badIp: string) => {
+  const handleToggleUserActive = async (userId: string) => {
     try {
-      apiService.simulatePassiveInterfaceIpViolation(name, badIp);
-      refreshData();
-      showToast('error', `ALERTE : Assignation IP simulée sur l'interface passive ${name} !`);
-    } catch (err: unknown) {
-      if (err instanceof Error) showToast('error', err.message);
-    }
-  };
-
-  const handleRectifyInterface = (name: string) => {
-    try {
-      apiService.rectifyPassiveInterface(name);
-      refreshData();
-      showToast('success', `Conformité furtive restaurée pour ${name} (IP révoquée)`);
-    } catch (err: unknown) {
-      if (err instanceof Error) showToast('error', err.message);
-    }
-  };
-
-  const handleToggleUserActive = (userId: string) => {
-    try {
-      apiService.toggleUserActive(userId);
-      refreshData();
+      await apiService.toggleUserActive(userId);
+      await refreshData();
       showToast('success', 'Statut du compte utilisateur mis à jour');
     } catch (err: unknown) {
       if (err instanceof Error) showToast('error', err.message);
     }
   };
 
-  const handleCreateUser = (data: { email: string; fullName: string; role: UserRole }) => {
+  const handleCreateUser = async (data: {
+    email: string;
+    fullName: string;
+    role: UserRole;
+    password?: string;
+  }) => {
     try {
-      apiService.createUser(data);
-      refreshData();
+      const res = await apiService.createUser({
+        email: data.email,
+        fullName: data.fullName,
+        roleName: data.role,
+        password: data.password,
+      });
+      await refreshData();
       showToast('success', `Compte ${data.email} créé avec succès`);
+      return res;
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        showToast('error', err.message);
-        throw err;
-      }
+      const msg = err instanceof Error ? err.message : 'Erreur de création de compte';
+      showToast('error', msg);
+      throw err;
     }
   };
 
@@ -172,7 +177,6 @@ export default function App() {
       {/* Main Top Header */}
       <Header
         currentUser={currentUser}
-        onSwitchRole={handleSwitchRole}
         onLogout={handleLogout}
         onOpenLogin={() => setIsLoginOpen(true)}
       />
@@ -195,7 +199,6 @@ export default function App() {
             interfaces={interfaces}
             storage={storage}
             canManageSystem={apiService.hasPermission('system:manage')}
-            onRestartService={handleRestartService}
             onNavigateToInterfaces={() => setActiveTab('interfaces')}
             onNavigateToValidation={() => setActiveTab('validation')}
           />
@@ -205,8 +208,6 @@ export default function App() {
           <InterfacesView
             interfaces={interfaces}
             canManageInterfaces={apiService.hasPermission('interfaces:manage')}
-            onSimulateViolation={handleSimulateViolation}
-            onRectifyInterface={handleRectifyInterface}
           />
         )}
 
@@ -235,7 +236,7 @@ export default function App() {
           <div className="flex items-center gap-4 text-slate-400">
             <span>Debian 13 (Trixie)</span>
             <span>·</span>
-            <span>AF_PACKET Promisc</span>
+            <span>PostgreSQL & Alembic</span>
             <span>·</span>
             <span>Argon2id RBAC</span>
           </div>

@@ -137,21 +137,32 @@ def init_admin(email: str, full_name: str, password: str):
         db.close()
 
 
+import getpass
+
 def main():
     parser = argparse.ArgumentParser(description="Outil d'administration CLI OpenNDR V0.1")
     subparsers = parser.add_subparsers(dest="command")
 
-    admin_parser = subparsers.add_parser("init-admin", help="Initialiser le premier compte administrateur")
-    admin_parser.add_argument("--email", required=True, help="Adresse e-mail de l'administrateur")
-    admin_parser.add_argument("--full-name", required=True, help="Nom complet de l'administrateur")
-    admin_parser.add_argument("--password", required=True, help="Mot de passe robuste (min 12 car, maj, min, chif, spec)")
+    for cmd_name in ["create-first-admin", "init-admin"]:
+        admin_parser = subparsers.add_parser(cmd_name, help="Initialiser de façon sécurisée le premier compte administrateur")
+        admin_parser.add_argument("--email", required=True, help="Adresse e-mail de l'administrateur")
+        admin_parser.add_argument("--full-name", required=True, help="Nom complet de l'administrateur")
+        admin_parser.add_argument("--password", required=False, default=None, help="Mot de passe robuste (invité si omis)")
 
     args = parser.parse_args()
-    if args.command == "init-admin":
-        init_admin(args.email, args.full_name, args.password)
+    if args.command in ["create-first-admin", "init-admin"]:
+        password = args.password
+        if not password:
+            password = getpass.getpass("Saisissez le mot de passe pour le premier administrateur : ")
+            confirm = getpass.getpass("Confirmez le mot de passe : ")
+            if password != confirm:
+                print("[ERREUR] Les deux mots de passe ne correspondent pas.")
+                sys.exit(1)
+        init_admin(args.email, args.full_name, password)
     else:
         parser.print_help()
 
 
 if __name__ == "__main__":
     main()
+

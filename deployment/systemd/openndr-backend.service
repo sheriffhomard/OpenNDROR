@@ -1,6 +1,6 @@
 [Unit]
 Description=OpenNDR Core Backend API Service (FastAPI)
-Documentation=https://github.com/openndr/openndr
+Documentation=https://github.com/sheriffhomard/OpenNDROR
 After=network.target postgresql.service
 Wants=postgresql.service
 

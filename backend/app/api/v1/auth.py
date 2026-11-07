@@ -52,7 +52,7 @@ def logout(
     """Révocation du jeton et journalisation de la déconnexion."""
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
-        revoke_token(token)
+        revoke_token(token, db=db)
 
     ip_addr = get_client_ip(request)
     AuditService.log_event(

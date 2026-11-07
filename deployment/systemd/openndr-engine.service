@@ -1,6 +1,6 @@
 [Unit]
 Description=OpenNDR High-Performance Network Capture & Analysis Engine (Rust)
-Documentation=https://github.com/openndr/openndr
+Documentation=https://github.com/sheriffhomard/OpenNDROR
 After=network.target
 
 [Service]

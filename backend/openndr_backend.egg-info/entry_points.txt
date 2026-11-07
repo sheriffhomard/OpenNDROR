@@ -1,0 +1,2 @@
+[console_scripts]
+openndr-admin = app.cli:main

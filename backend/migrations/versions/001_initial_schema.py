@@ -124,8 +124,23 @@ def upgrade() -> None:
     op.create_index(op.f('ix_audit_logs_timestamp'), 'audit_logs', ['timestamp'], unique=False)
     op.create_index(op.f('ix_audit_logs_user_email'), 'audit_logs', ['user_email'], unique=False)
 
+    # 9. Table revoked_tokens (Révocation persistante multi-workers)
+    op.create_table(
+        'revoked_tokens',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('jti', sa.String(length=64), nullable=False),
+        sa.Column('user_id', sa.String(length=36), nullable=True),
+        sa.Column('revoked_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_revoked_tokens_jti'), 'revoked_tokens', ['jti'], unique=True)
+    op.create_index(op.f('ix_revoked_tokens_expires_at'), 'revoked_tokens', ['expires_at'], unique=False)
+
 
 def downgrade() -> None:
+    op.drop_table('revoked_tokens')
     op.drop_table('audit_logs')
     op.drop_table('system_settings')
     op.drop_table('network_interfaces')

@@ -12,6 +12,11 @@ from app.models.audit import AuditLog
 logger = logging.getLogger("openndr.audit")
 
 
+class SecurityAuditError(RuntimeError):
+    """Levée lorsqu'une action critique ne peut être persistée dans le journal d'audit."""
+    pass
+
+
 class AuditService:
     @staticmethod
     def log_event(
@@ -24,17 +29,20 @@ class AuditService:
         resource_id: Optional[str] = None,
         ip_address: str = "127.0.0.1",
         details: Optional[Dict[str, Any]] = None,
+        strict: bool = True,
     ) -> AuditLog:
         """
         Insère un événement d'audit dans PostgreSQL.
         Ne jamais inclure de mot de passe, de secret ou de jeton dans `details`.
+        Si `strict=True` (par défaut pour les actions critiques), un échec d'insertion
+        annule la transaction et lève une exception pour empêcher toute action silencieuse non auditée.
         """
-        # Filtrage préventif des secrets accidentels
+        # Filtrage préventif strict de tout secret accidentel
         sanitized_details = None
         if details:
             cleaned = {}
             for k, v in details.items():
-                if any(sec in k.lower() for sec in ["pass", "token", "secret", "key", "cred"]):
+                if any(sec in k.lower() for sec in ["pass", "token", "secret", "key", "cred", "authorization"]):
                     cleaned[k] = "[REDACTED]"
                 else:
                     cleaned[k] = v
@@ -55,7 +63,12 @@ class AuditService:
             db.add(entry)
             db.commit()
             db.refresh(entry)
+            return entry
         except Exception as e:
             db.rollback()
-            logger.error(f"Échec de l'enregistrement de l'audit log : {e}")
-        return entry
+            logger.error(f"Échec de l'enregistrement de l'audit log [{action}] : {e}")
+            if strict:
+                raise SecurityAuditError(
+                    f"Échec critique de journalisation d'audit pour l'action '{action}'. Opération interrompue."
+                ) from e
+            return entry

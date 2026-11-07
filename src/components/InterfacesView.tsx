@@ -3,24 +3,18 @@ import {
   Network,
   ShieldCheck,
   ShieldAlert,
-  AlertOctagon,
-  RefreshCw,
   Terminal,
+  Radio,
 } from 'lucide-react';
 import { NetworkInterfaceConfig } from '../types/system';
 
 interface InterfacesViewProps {
   interfaces: NetworkInterfaceConfig[];
   canManageInterfaces: boolean;
-  onSimulateViolation: (name: string, badIp: string) => void;
-  onRectifyInterface: (name: string) => void;
 }
 
 export const InterfacesView: React.FC<InterfacesViewProps> = ({
   interfaces,
-  canManageInterfaces,
-  onSimulateViolation,
-  onRectifyInterface,
 }) => {
   const [selectedIface, setSelectedIface] = useState<string>('eth1');
 
@@ -34,16 +28,17 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-100">
-              Gestion & Isolation Stricte des Interfaces Réseau
+              Configuration & Séparation des Interfaces Réseau
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-3xl leading-relaxed">
-              Conformément à l’ADR-003, la sonde OpenNDR applique une séparation étanche entre
-              l’interface d’administration (IP, gestion) et l’interface de capture passive (SPAN/TAP,
-              zéro émission, aucune IP, promisc strict).
+              OpenNDR applique une séparation stricte entre l’interface d’administration (IP, Web HTTPS, API REST)
+              et l’interface de capture passive (SPAN/TAP, zéro émission, aucune IP, promisc strict).
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 font-mono">Kernel Linux 6.x · AF_PACKET</span>
+            <span className="text-xs text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded">
+              Debian 13 · AF_PACKET Standby (V0.1)
+            </span>
           </div>
         </div>
       </div>
@@ -51,7 +46,7 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
       {/* Interface selection tabs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {interfaces.map((iface) => {
-          const isSelected = selectedIface === iface.name;
+          const isSelected = (current?.name === iface.name);
           const isCompliant = iface.isStealthCompliant;
           return (
             <button
@@ -85,19 +80,19 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
                 <div className="flex justify-between">
                   <span>Adresse IP :</span>
                   <span className="font-mono text-slate-200">
-                    {iface.ipAddress || 'Aucune IP (Conforme)'}
+                    {iface.ipAddress || 'Aucune IP (Conforme furtif)'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Mode Promiscuous :</span>
                   <span className="font-mono text-slate-200">
-                    {iface.isPromiscuous ? 'ACTIVÉ' : 'DÉSACTIVÉ'}
+                    {iface.isPromiscuous ? 'ACTIVÉ (Promisc)' : 'DÉSACTIVÉ'}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Paquets émis (Tx) :</span>
-                  <span className={`font-mono ${iface.txPackets === 0 && iface.role === 'CAPTURE_PASSIVE' ? 'text-emerald-400' : 'text-slate-200'}`}>
-                    {iface.txPackets}
+                  <span>Rôle sonde :</span>
+                  <span className="font-mono text-slate-300">
+                    {iface.role === 'CAPTURE_PASSIVE' ? 'Miroir SPAN (Réception seule)' : 'Supervision & API'}
                   </span>
                 </div>
               </div>
@@ -106,14 +101,14 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
         })}
       </div>
 
-      {/* Interface Detail & Security Audit Box */}
+      {/* Interface Detail & Technical Properties */}
       {current && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-slate-100">
-                  Inspection Détaillée · {current.name}
+                <h3 className="text-base font-semibold text-slate-100 font-mono">
+                  {current.name}
                 </h3>
                 {current.isStealthCompliant ? (
                   <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
@@ -123,36 +118,16 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
                 ) : (
                   <span className="flex items-center gap-1 text-xs text-rose-400 font-bold">
                     <ShieldAlert className="w-3.5 h-3.5" />
-                    Violation d'Isolation Détectée
+                    Non Conforme
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-1">{current.complianceReason}</p>
             </div>
 
-            {/* Actions for testing */}
-            {canManageInterfaces && isPassive && (
-              <div className="flex items-center gap-2">
-                {current.isStealthCompliant ? (
-                  <button
-                    onClick={() => onSimulateViolation(current.name, '192.168.1.99/24')}
-                    className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/50 text-rose-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5"
-                    title="Simuler une configuration erronée où une IP est assignée à l'interface de capture passive"
-                  >
-                    <AlertOctagon className="w-3.5 h-3.5" />
-                    Simuler assignation IP accidentelle
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => onRectifyInterface(current.name)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Rétablir l’isolation stricte (Révoquer IP)
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="text-xs text-slate-500 font-mono">
+              Persisté dans PostgreSQL (table `network_interfaces`)
+            </div>
           </div>
 
           {/* Technical properties grid */}
@@ -170,7 +145,7 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
               <div className="text-xs font-mono font-medium text-slate-200 mt-1">{current.mtu} octets</div>
             </div>
             <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg">
-              <div className="text-xs text-slate-400">Pertes de paquets (Rx Drop)</div>
+              <div className="text-xs text-slate-400">Pertes de trames (Rx Drop)</div>
               <div className={`text-xs font-mono font-medium mt-1 ${current.rxDropped > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
                 {current.rxDropped} trames
               </div>
@@ -190,8 +165,14 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
                 <div className="text-emerald-400">net.ipv4.conf.{current.name}.arp_announce = 2</div>
                 <div># Désactivation totale d'IPv6 sur le lien de capture</div>
                 <div className="text-emerald-400">net.ipv6.conf.{current.name}.disable_ipv6 = 1</div>
-                <div># Blocage absolu de la transmission de paquets</div>
+                <div># Activation du mode Promiscuous et coupure ARP</div>
                 <div className="text-emerald-400">ip link set {current.name} promisc on arp off up</div>
+              </div>
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded text-xs text-slate-400 flex items-start gap-2">
+                <Radio className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Note V0.1 :</strong> En version V0.1, le moteur Rust reste en mode standby sans socket actif de capture paquet. Le décodage et l'analyse de flux AF_PACKET seront intégrés dans la V0.2.
+                </span>
               </div>
             </div>
           )}

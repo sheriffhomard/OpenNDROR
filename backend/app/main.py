@@ -26,12 +26,19 @@ async def lifespan(app: FastAPI):
     settings.validate_production_invariants()
     logger.info(f"Démarrage d'OpenNDR Backend v{settings.VERSION} en environnement [{settings.OPENNDR_ENV}]")
 
-    # Initialisation automatique des tables si SQLite ou premier lancement
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Schémas de base de données vérifiés.")
-    except Exception as e:
-        logger.warning(f"Initialisation des tables : {e}")
+    # Contrôle de la connectivité base de données au démarrage
+    from app.core.database import check_database_connection
+    db_ok, db_msg = check_database_connection()
+    if not db_ok and settings.OPENNDR_ENV.lower() == "production":
+        raise RuntimeError(f"[FATAL SÉCURITÉ] Base de données inaccessible en production : {db_msg}")
+    logger.info(f"Connectivité base de données : {db_msg}")
+
+    # En environnement de développement local / tests uniquement (hors production)
+    if settings.OPENNDR_ENV.lower() != "production" and "sqlite" in settings.DATABASE_URL:
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception as e:
+            logger.warning(f"Initialisation dev SQLite : {e}")
 
     yield
     logger.info("Arrêt d'OpenNDR Backend")

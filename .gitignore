@@ -1,8 +1,42 @@
+# Node / Frontend
 node_modules/
 build/
 dist/
 coverage/
 .DS_Store
 *.log
-.env*
+
+# Environment files
+.env
+.env.*
 !.env.example
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+env/
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Rust
+target/
+Cargo.lock
+
+# System & IDE
+.idea/
+.vscode/
+*.swp
+*~

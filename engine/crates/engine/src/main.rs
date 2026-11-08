@@ -5,8 +5,7 @@
 //! de l'interface de capture, écoute sur le socket IPC `/run/openndr/engine.sock`
 //! et gère proprement les signaux d'arrêt SIGINT/SIGTERM.
 
-use openndr_capture::{CaptureConfig, CaptureEngine};
-use openndr_common::{validate_capture_interface_isolation, EngineTelemetry, OpenNdrError};
+use openndr_common::{validate_capture_interface_isolation, EngineTelemetry};
 use serde::Deserialize;
 use std::env;
 use std::fs;
@@ -151,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(e) = validation_result {
         error!("ÉCHEC DE VALIDATION DE SÉCURITÉ : {}", e);
-        return Err(Box::new(e));
+        return Err(e.into());
     }
     info!("Conformité d'isolation réseau validée : mode furtif actif.");
 

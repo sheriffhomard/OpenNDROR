@@ -157,6 +157,40 @@ class TestApiAndDatabaseV01(unittest.TestCase):
         self.assertGreaterEqual(len(logs), 1)
         self.assertEqual(logs[0]["status"], "SUCCESS")
 
+    def test_user_creation_and_deletion(self):
+        token_admin = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@test.local", "password": "AdminSecurePass2026!"},
+        ).json()["access_token"]
+
+        # Créer un utilisateur temporaire
+        res_create = self.client.post(
+            "/api/v1/users",
+            headers={"Authorization": f"Bearer {token_admin}"},
+            json={
+                "email": "temp_analyst@test.local",
+                "full_name": "Temporary Analyst",
+                "role_name": "Analyst",
+                "password": "TempPass2026!Strong",
+            },
+        )
+        self.assertEqual(res_create.status_code, 200)
+        created_id = res_create.json()["id"]
+
+        # Suppression de l'utilisateur
+        res_del = self.client.delete(
+            f"/api/v1/users/{created_id}",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(res_del.status_code, 204)
+
+        # Vérifier que la ressource n'existe plus
+        res_del_again = self.client.delete(
+            f"/api/v1/users/{created_id}",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(res_del_again.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()

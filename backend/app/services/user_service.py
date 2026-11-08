@@ -128,3 +128,35 @@ class UserService:
         )
 
         return target_user
+
+    @staticmethod
+    def delete_user(
+        db: Session,
+        target_user: User,
+        current_admin: User,
+        ip_address: str = "127.0.0.1",
+    ) -> None:
+        """Suppression d'un compte utilisateur avec audit."""
+        if target_user.id == current_admin.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Impossible de supprimer votre propre compte administrateur.",
+            )
+
+        deleted_email = target_user.email
+        deleted_id = target_user.id
+
+        db.delete(target_user)
+        db.commit()
+
+        AuditService.log_event(
+            db=db,
+            action="USER_DELETED",
+            resource_type="USER",
+            resource_id=deleted_id,
+            status="SUCCESS",
+            user_email=current_admin.email,
+            user_id=current_admin.id,
+            ip_address=ip_address,
+            details={"deleted_email": deleted_email, "deleted_id": deleted_id},
+        )

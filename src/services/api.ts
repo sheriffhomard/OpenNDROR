@@ -368,6 +368,40 @@ class ApiService {
     };
   }
 
+  public async updateUserRole(
+    userId: string,
+    role: 'Administrator' | 'Analyst' | 'Observer'
+  ): Promise<User> {
+    const res = await this.request<{
+      id: string;
+      email: string;
+      full_name: string;
+      role: 'Administrator' | 'Analyst' | 'Observer';
+      permissions: PermissionCode[];
+      is_active: boolean;
+      created_at: string;
+    }>(`/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role_name: role }),
+    });
+
+    return {
+      id: res.id,
+      email: res.email,
+      fullName: res.full_name,
+      role: res.role,
+      permissions: res.permissions,
+      isActive: res.is_active,
+      createdAt: res.created_at,
+    };
+  }
+
+  public async deleteUser(userId: string): Promise<void> {
+    await this.request<void>(`/users/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==========================================
   // Supervision Système & Santé
   // ==========================================
@@ -434,6 +468,10 @@ class ApiService {
 
   public async getStorageMetrics(): Promise<StorageMetrics> {
     return await this.request<StorageMetrics>('/system/storage');
+  }
+
+  public async getStorage(): Promise<StorageMetrics> {
+    return this.getStorageMetrics();
   }
 
   public async getAuditLogs(

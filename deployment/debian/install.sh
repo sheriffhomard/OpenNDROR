@@ -154,6 +154,20 @@ log_info "6/10 - Configuration sécurisée des variables d'environnement..."
 
 if [ ! -f "$OPENNDR_CONF_DIR/backend.env" ]; then
     RANDOM_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
+    PG_PASSWORD=$(python3 -c "import secrets; print(secrets.token_hex(24))")
+
+    # Initialisation de la base PostgreSQL et de l'utilisateur dédié
+    if systemctl is-active --quiet postgresql 2>/dev/null || systemctl start postgresql 2>/dev/null; then
+        sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='openndr'" 2>/dev/null | grep -q 1 || \
+            sudo -u postgres psql -c "CREATE USER openndr WITH PASSWORD '$PG_PASSWORD';" 2>/dev/null || true
+        sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='openndr_db'" 2>/dev/null | grep -q 1 || \
+            sudo -u postgres psql -c "CREATE DATABASE openndr_db OWNER openndr;" 2>/dev/null || true
+        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE openndr_db TO openndr;" 2>/dev/null || true
+        log_success "Base de données 'openndr_db' et utilisateur PostgreSQL dédiés configurés."
+    else
+        log_warn "Service PostgreSQL non actif lors de l'installation. Configuration de base enregistrée dans backend.env."
+    fi
+
     cat <<EOF > "$OPENNDR_CONF_DIR/backend.env"
 # ==============================================================================
 # OpenNDR V0.1 — Variables d'Environnement Backend (/etc/openndr/backend.env)
@@ -167,7 +181,7 @@ SECRET_KEY=${RANDOM_SECRET}
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
-DATABASE_URL=postgresql+psycopg2://openndr:openndr_secure_password@127.0.0.1:5432/openndr_db
+DATABASE_URL=postgresql+psycopg2://openndr:${PG_PASSWORD}@127.0.0.1:5432/openndr_db
 ADMIN_INTERFACE=eth0
 CAPTURE_INTERFACE=eth1
 
@@ -179,13 +193,13 @@ LOG_RETENTION_DAYS=90
 EOF
     chown root:openndr "$OPENNDR_CONF_DIR/backend.env"
     chmod 640 "$OPENNDR_CONF_DIR/backend.env"
-    log_success "Fichier /etc/openndr/backend.env généré avec une clé cryptographique forte."
+    log_success "Fichier /etc/openndr/backend.env généré avec clés cryptographiques aléatoires."
 fi
 
 # ------------------------------------------------------------------------------
-# Étape 8 : Virtualenv Python & Dépendances Backend
+# Étape 8 : Virtualenv Python, Dépendances & Migrations Alembic
 # ------------------------------------------------------------------------------
-log_info "7/10 - Installation de l'environnement virtuel Python..."
+log_info "7/10 - Installation de l'environnement virtuel Python et migrations..."
 cd "$OPENNDR_DIR/backend"
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv
@@ -193,6 +207,25 @@ fi
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e .
 log_success "Dépendances Python installées."
+
+# Application des migrations Alembic
+if [ -f "$OPENNDR_CONF_DIR/backend.env" ]; then
+    set -a
+    . "$OPENNDR_CONF_DIR/backend.env"
+    set +a
+    .venv/bin/alembic upgrade head 2>/dev/null && log_success "Schéma PostgreSQL synchronisé via Alembic." || log_warn "Migrations Alembic différées au premier démarrage de postgresql."
+fi
+
+# ------------------------------------------------------------------------------
+# Étape 8bis : Compilation du Frontend Vite
+# ------------------------------------------------------------------------------
+log_info "7bis/10 - Compilation des assets Frontend (Vite SPA)..."
+cd "$OPENNDR_DIR"
+if command -v npm >/dev/null 2>&1; then
+    npm ci --production=false 2>/dev/null || npm install 2>/dev/null || true
+    npm run build 2>/dev/null && log_success "Frontend compilé dans $OPENNDR_DIR/dist." || log_warn "Compilation Vite différée."
+    chown -R openndr:openndr "$OPENNDR_DIR/dist" 2>/dev/null || true
+fi
 
 # ------------------------------------------------------------------------------
 # Étape 9 : Compilation du Moteur Réseau Rust

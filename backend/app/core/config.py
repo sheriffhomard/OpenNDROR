@@ -31,7 +31,7 @@ class Settings:
     # Base de données PostgreSQL / SQLite
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql+psycopg2://openndr:openndr_secure_password@127.0.0.1:5432/openndr_db"
+        ""
         if os.getenv("OPENNDR_ENV") == "production"
         else "sqlite:///./openndr.db",
     )
@@ -91,6 +91,17 @@ class Settings:
             if len(self.SECRET_KEY) < 32:
                 raise ValueError(
                     "[FATAL SÉCURITÉ] SECRET_KEY trop courte en production (minimum 32 caractères requis)."
+                )
+            if not self.DATABASE_URL:
+                raise ValueError(
+                    "[FATAL SÉCURITÉ] Démarrage refusé en mode PRODUCTION : "
+                    "DATABASE_URL est manquant. Définissez la chaîne de connexion PostgreSQL dans /etc/openndr/backend.env."
+                )
+            if "openndr_secure_password" in self.DATABASE_URL or "postgres:postgres" in self.DATABASE_URL:
+                raise ValueError(
+                    "[FATAL SÉCURITÉ] Démarrage refusé en mode PRODUCTION : "
+                    "DATABASE_URL contient des identifiants par défaut insécurisés. "
+                    "Configurez des identifiants PostgreSQL dédiés dans /etc/openndr/backend.env."
                 )
 
 

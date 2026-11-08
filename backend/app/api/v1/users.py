@@ -134,3 +134,28 @@ def toggle_user_active(
         "created_at": updated.created_at,
         "last_login_at": updated.last_login_at,
     }
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: str,
+    request: Request,
+    current_admin: User = Depends(require_permission("users:manage")),
+    db: Session = Depends(get_db),
+):
+    """Suppression définitive d'un compte utilisateur."""
+    target = UserService.get_user_by_id(db, user_id)
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur introuvable.",
+        )
+
+    ip_addr = get_client_ip(request)
+    UserService.delete_user(
+        db=db,
+        target_user=target,
+        current_admin=current_admin,
+        ip_address=ip_addr,
+    )
+    return None

@@ -4,19 +4,39 @@ Permet l'initialisation sécurisée du premier compte administrateur et des rôl
 """
 import argparse
 import sys
-from app.core.database import SessionLocal, Base, engine
+from sqlalchemy import inspect
+from app.core.database import SessionLocal, engine
 from app.models.user import User, Role, Permission, role_permissions
 from app.core.security import hash_password, validate_password_strength
 from app.services.audit_service import AuditService
 
 
-def init_db_schema():
-    """Crée les tables si elles n'existent pas encore (fallback avant migrations)."""
-    Base.metadata.create_all(bind=engine)
+def check_database_migrated():
+    """
+    Vérifie impérativement que les migrations de schéma Alembic ont été appliquées.
+    L'appel direct à Base.metadata.create_all est strictement banni : Alembic est
+    l'unique mécanisme autorisé pour gouverner le schéma de production.
+    """
+    try:
+        inspector = inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+        required_tables = {"users", "roles", "permissions", "revoked_tokens", "audit_logs"}
+
+        if not required_tables.issubset(existing_tables):
+            missing = required_tables - existing_tables
+            print("[ERREUR SÉCURITÉ] La base de données n'est pas prête ou les migrations sont incomplètes.")
+            print(f"Tables requises manquantes : {', '.join(sorted(missing))}")
+            print("Veuillez exécuter les migrations officielles avant le bootstrap administrateur :")
+            print("    alembic upgrade head")
+            sys.exit(1)
+    except Exception as e:
+        print(f"[ERREUR SÉCURITÉ] Impossible de vérifier l'état de la base de données : {e}")
+        print("Vérifiez que PostgreSQL est démarré et accessible via DATABASE_URL.")
+        sys.exit(1)
 
 
 def init_roles_and_permissions(db):
-    """Initialise les rôles et permissions canoniques V0.1."""
+    """Initialise les rôles et permissions canoniques V0.1 dans la base migrée."""
     roles_def = [
         ("Administrator", "Gestion intégrale de la sonde, utilisateurs et configurations"),
         ("Analyst", "Investigation des événements, alertes et consultation des journaux"),
@@ -80,12 +100,13 @@ def init_roles_and_permissions(db):
 def init_admin(email: str, full_name: str, password: str):
     """
     Initialisation protégée du premier administrateur :
+    - Vérifie que les migrations Alembic ont été appliquées (aucun create_all).
     - Échoue immédiatement si un administrateur existe déjà.
-    - Valide la conformité du mot de passe.
-    - Hache avec Argon2id.
+    - Valide la conformité de la politique de mot de passe.
+    - Hache avec Argon2id obligatoire.
     - Enregistre l'événement d'audit.
     """
-    init_db_schema()
+    check_database_migrated()
     db = SessionLocal()
     try:
         init_roles_and_permissions(db)

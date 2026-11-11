@@ -522,6 +522,18 @@ class ApiService {
     });
   }
 
+  public async getIsolationCheck(): Promise<{
+    interface: string;
+    status: string;
+    is_isolated: boolean;
+    has_ip: boolean;
+    has_routes: boolean;
+    is_promiscuous: boolean;
+    details: string;
+  }> {
+    return await this.request('/system/interfaces/isolation-check');
+  }
+
   public async getHealth(): Promise<{
     status: string;
     version: string;

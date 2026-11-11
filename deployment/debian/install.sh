@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# OpenNDR V0.1 — Installateur Complet et Reproductible pour Debian 13 (Trixie)
+# OpenNDR V0.1 — Installateur Complet, Robuste et Idempotent pour Debian 13 (Trixie)
 # Dépôt officiel : https://github.com/sheriffhomard/OpenNDROR
 # ==============================================================================
-set -euo pipefail
+set -Eeuo pipefail
 
 # Couleurs pour le terminal
 RED='\033[0;31m'
@@ -16,6 +16,9 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1" >&2; }
+
+# Trap d'erreur fatal : arrêt immédiat avec identification de la ligne défaillante
+trap 'log_error "ÉCHEC CRITIQUE à la ligne $LINENO (commande: \"$BASH_COMMAND\", code sortie: $?). Installation interrompue."; exit 1' ERR
 
 # Constantes d'arborescence
 OPENNDR_DIR="/opt/openndr"
@@ -33,7 +36,7 @@ echo "======================================================================"
 # Étape 1 : Vérification des privilèges root
 # ------------------------------------------------------------------------------
 if [ "$(id -u)" -ne 0 ]; then
-    log_error "Ce script doit être exécuté avec les privilèges root (sudo bash install.sh)."
+    log_error "Ce script doit impérativement être exécuté avec les privilèges root (sudo bash install.sh)."
     exit 1
 fi
 
@@ -46,8 +49,11 @@ if [ -f /etc/os-release ]; then
     . /etc/os-release
     log_info "Distribution détectée : $NAME $VERSION ($ID)"
     if [ "$ID" != "debian" ] && [ "$ID" != "ubuntu" ]; then
-        log_warn "Distribution non-Debian détectée. Poursuite sous réserve de compatibilité."
+        log_warn "Distribution non-Debian ($ID). Poursuite sous réserve de compatibilité."
     fi
+else
+    log_error "Fichier /etc/os-release introuvable. Impossible d'identifier le système."
+    exit 1
 fi
 
 # Contrôle CPU et RAM
@@ -59,12 +65,16 @@ log_info "Cœurs CPU : $CPU_CORES (Requis min : 2)"
 log_info "Mémoire RAM : ${TOTAL_RAM_GB} Go (Requis min : 4 Go, recommandé : 8+ Go)"
 
 if [ "$CPU_CORES" -lt 2 ]; then
-    log_error "Nombre de cœurs CPU insuffisant ($CPU_CORES < 2)."
+    log_error "Nombre de cœurs CPU insuffisant ($CPU_CORES < 2 pour le moteur et l'API)."
     exit 1
 fi
 
+if [ "$TOTAL_RAM_GB" -lt 3 ]; then
+    log_warn "Mémoire RAM inférieure à 4 Go ($TOTAL_RAM_GB Go). Risque d'OOM avec Argon2id."
+fi
+
 # ------------------------------------------------------------------------------
-# Étape 3 : Installation des dépendances Debian
+# Étape 3 : Installation des dépendances système Debian
 # ------------------------------------------------------------------------------
 log_info "2/10 - Installation des paquets système via apt..."
 export DEBIAN_FRONTEND=noninteractive
@@ -85,11 +95,11 @@ apt-get install -y --no-install-recommends \
     ethtool \
     libcap2-bin
 
-# Vérification Rust
+# Vérification Rust / Cargo
 if ! command -v cargo >/dev/null 2>&1; then
     log_info "Installation de l'environnement Rust / Cargo..."
     apt-get install -y cargo rustc || {
-        log_warn "Installation apt échouée pour Rust, tentative via rustup..."
+        log_warn "Installation apt échouée pour Rust, tentative d'amorce..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         export PATH="$HOME/.cargo/bin:$PATH"
     }
@@ -138,35 +148,38 @@ chown -R openndr:openndr "$OPENNDR_LOG_DIR" "$OPENNDR_RUN_DIR" "$OPENNDR_VAR_DIR
 chmod 750 "$OPENNDR_LOG_DIR" "$OPENNDR_RUN_DIR"
 
 # ------------------------------------------------------------------------------
-# Étape 6 : Déploiement des sources
+# Étape 6 : Déploiement des sources applicatives
 # ------------------------------------------------------------------------------
-log_info "5/10 - Copie des sources applicatives vers $OPENNDR_DIR..."
+log_info "5/10 - Déploiement des sources applicatives vers $OPENNDR_DIR..."
 cp -r backend "$OPENNDR_DIR/"
 cp -r engine "$OPENNDR_DIR/"
 cp -r deployment "$OPENNDR_DIR/"
-cp -r src "$OPENNDR_DIR/" 2>/dev/null || true
-cp package.json tsconfig.json vite.config.ts index.html "$OPENNDR_DIR/" 2>/dev/null || true
+cp -r src "$OPENNDR_DIR/"
+cp -r public "$OPENNDR_DIR/" 2>/dev/null || true
+cp package.json tsconfig.json vite.config.ts index.html "$OPENNDR_DIR/"
 
 # ------------------------------------------------------------------------------
-# Étape 7 : Configuration Backend & Génération des Secrets
+# Étape 7 : PostgreSQL, Génération des Secrets & Fichier d'Environnement
 # ------------------------------------------------------------------------------
-log_info "6/10 - Configuration sécurisée des variables d'environnement..."
+log_info "6/10 - Configuration sécurisée de PostgreSQL et des variables d'environnement..."
+
+# Démarrer le service PostgreSQL s'il est inactif
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl start postgresql
+fi
 
 if [ ! -f "$OPENNDR_CONF_DIR/backend.env" ]; then
     RANDOM_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
     PG_PASSWORD=$(python3 -c "import secrets; print(secrets.token_hex(24))")
 
     # Initialisation de la base PostgreSQL et de l'utilisateur dédié
-    if systemctl is-active --quiet postgresql 2>/dev/null || systemctl start postgresql 2>/dev/null; then
-        sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='openndr'" 2>/dev/null | grep -q 1 || \
-            sudo -u postgres psql -c "CREATE USER openndr WITH PASSWORD '$PG_PASSWORD';" 2>/dev/null || true
-        sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='openndr_db'" 2>/dev/null | grep -q 1 || \
-            sudo -u postgres psql -c "CREATE DATABASE openndr_db OWNER openndr;" 2>/dev/null || true
-        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE openndr_db TO openndr;" 2>/dev/null || true
-        log_success "Base de données 'openndr_db' et utilisateur PostgreSQL dédiés configurés."
-    else
-        log_warn "Service PostgreSQL non actif lors de l'installation. Configuration de base enregistrée dans backend.env."
-    fi
+    sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='openndr'" | grep -q 1 || \
+        sudo -u postgres psql -c "CREATE USER openndr WITH PASSWORD '$PG_PASSWORD';"
+
+    sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='openndr_db'" | grep -q 1 || \
+        sudo -u postgres psql -c "CREATE DATABASE openndr_db OWNER openndr;"
+
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE openndr_db TO openndr;"
 
     cat <<EOF > "$OPENNDR_CONF_DIR/backend.env"
 # ==============================================================================
@@ -193,67 +206,77 @@ LOG_RETENTION_DAYS=90
 EOF
     chown root:openndr "$OPENNDR_CONF_DIR/backend.env"
     chmod 640 "$OPENNDR_CONF_DIR/backend.env"
-    log_success "Fichier /etc/openndr/backend.env généré avec clés cryptographiques aléatoires."
+    log_success "Fichier /etc/openndr/backend.env généré avec clés cryptographiques fortes."
+else
+    log_info "Fichier /etc/openndr/backend.env déjà existant, préservation des secrets."
+fi
+
+# Copie du gabarit openndr.conf si absent
+if [ ! -f "$OPENNDR_CONF_DIR/openndr.conf" ]; then
+    cp "$OPENNDR_DIR/deployment/configuration/openndr.conf.template" "$OPENNDR_CONF_DIR/openndr.conf"
+    chown root:openndr "$OPENNDR_CONF_DIR/openndr.conf"
+    chmod 644 "$OPENNDR_CONF_DIR/openndr.conf"
 fi
 
 # ------------------------------------------------------------------------------
-# Étape 8 : Virtualenv Python, Dépendances & Migrations Alembic
+# Étape 8 : Virtualenv Python, Dépendances & Migrations Alembic OBLIGATOIRES
 # ------------------------------------------------------------------------------
-log_info "7/10 - Installation de l'environnement virtuel Python et migrations..."
+log_info "7/10 - Installation du virtualenv Python et application des migrations Alembic..."
 cd "$OPENNDR_DIR/backend"
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv
 fi
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e .
-log_success "Dépendances Python installées."
 
-# Application des migrations Alembic
-if [ -f "$OPENNDR_CONF_DIR/backend.env" ]; then
-    set -a
-    . "$OPENNDR_CONF_DIR/backend.env"
-    set +a
-    .venv/bin/alembic upgrade head 2>/dev/null && log_success "Schéma PostgreSQL synchronisé via Alembic." || log_warn "Migrations Alembic différées au premier démarrage de postgresql."
-fi
+# Exécution stricte des migrations Alembic
+log_info "Application stricte des migrations Alembic sur PostgreSQL..."
+set -a
+. "$OPENNDR_CONF_DIR/backend.env"
+set +a
+
+# Contrôle du code de retour d'Alembic (aucun create_all de secours autorisé)
+.venv/bin/alembic upgrade head
+log_success "Migrations Alembic appliquées avec succès. Schéma PostgreSQL à jour."
 
 # ------------------------------------------------------------------------------
-# Étape 8bis : Compilation du Frontend Vite
+# Étape 9 : Compilation du Frontend Vite
 # ------------------------------------------------------------------------------
-log_info "7bis/10 - Compilation des assets Frontend (Vite SPA)..."
+log_info "8/10 - Compilation des assets de production Frontend (Vite)..."
 cd "$OPENNDR_DIR"
 if command -v npm >/dev/null 2>&1; then
-    npm ci --production=false 2>/dev/null || npm install 2>/dev/null || true
-    npm run build 2>/dev/null && log_success "Frontend compilé dans $OPENNDR_DIR/dist." || log_warn "Compilation Vite différée."
-    chown -R openndr:openndr "$OPENNDR_DIR/dist" 2>/dev/null || true
-fi
-
-# ------------------------------------------------------------------------------
-# Étape 9 : Compilation du Moteur Réseau Rust
-# ------------------------------------------------------------------------------
-log_info "8/10 - Compilation de l'exécutable Rust 'openndr-engine'..."
-cd "$OPENNDR_DIR/engine"
-cargo build --release --manifest-path Cargo.toml
-ENGINE_BIN="$OPENNDR_DIR/engine/target/release/openndr-engine"
-if [ -f "$ENGINE_BIN" ]; then
-    log_success "Binaire Rust compilé avec succès ($ENGINE_BIN)."
-    # Attribution des privilèges réseau minimaux pour AF_PACKET
-    setcap cap_net_raw,cap_net_admin=eip "$ENGINE_BIN" 2>/dev/null || true
+    npm ci --production=false || npm install
+    npm run build
+    chown -R openndr:openndr "$OPENNDR_DIR/dist"
+    log_success "Frontend compilé avec succès dans $OPENNDR_DIR/dist."
 else
-    log_error "Échec de compilation du binaire Rust."
+    log_error "npm introuvable. Impossible de compiler les assets Frontend."
     exit 1
 fi
 
 # ------------------------------------------------------------------------------
-# Étape 10 : Configuration Nginx & Services systemd
+# Étape 10 : Compilation du Moteur Réseau Rust & Services systemd
 # ------------------------------------------------------------------------------
-log_info "9/10 - Configuration Nginx et installation des unités systemd..."
+log_info "9/10 - Compilation du binaire Rust 'openndr-engine' et installation systemd..."
+cd "$OPENNDR_DIR/engine"
+cargo build --release --manifest-path Cargo.toml
+ENGINE_BIN="$OPENNDR_DIR/engine/target/release/openndr-engine"
 
-# Copie configuration Nginx
+if [ -f "$ENGINE_BIN" ]; then
+    log_success "Binaire Rust compilé avec succès ($ENGINE_BIN)."
+    setcap cap_net_raw,cap_net_admin=eip "$ENGINE_BIN" || true
+else
+    log_error "Échec de compilation du binaire Rust openndr-engine."
+    exit 1
+fi
+
+# Configuration Nginx
 if [ -d /etc/nginx/sites-available ]; then
     cp "$OPENNDR_DIR/deployment/debian/nginx-openndr.conf" /etc/nginx/sites-available/openndr.conf
     ln -sf /etc/nginx/sites-available/openndr.conf /etc/nginx/sites-enabled/openndr.conf
-    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-    nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+    rm -f /etc/nginx/sites-enabled/default || true
+    nginx -t
+    systemctl reload nginx || systemctl restart nginx
     log_success "Nginx configuré pour servir le frontend et proxyfier l'API."
 fi
 
@@ -261,23 +284,25 @@ fi
 if [ -d /etc/systemd/system ]; then
     cp "$OPENNDR_DIR/deployment/systemd/openndr-backend.service" /etc/systemd/system/
     cp "$OPENNDR_DIR/deployment/systemd/openndr-engine.service" /etc/systemd/system/
-    systemctl daemon-reload 2>/dev/null || true
-    systemctl enable openndr-backend.service 2>/dev/null || true
-    systemctl enable openndr-engine.service 2>/dev/null || true
+    cp "$OPENNDR_DIR/deployment/systemd/openndr-web.service" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable openndr-backend.service
+    systemctl enable openndr-engine.service
+    systemctl enable openndr-web.service
     log_success "Unités systemd installées et activées."
 fi
 
 # Lien symbolique vers openndr-admin dans /usr/local/bin
-ln -sf "$OPENNDR_DIR/backend/.venv/bin/openndr-admin" /usr/local/bin/openndr-admin 2>/dev/null || true
+ln -sf "$OPENNDR_DIR/backend/.venv/bin/openndr-admin" /usr/local/bin/openndr-admin
 
 # ------------------------------------------------------------------------------
 # Résumé final
 # ------------------------------------------------------------------------------
 echo "======================================================================"
-log_success "Installation d'OpenNDR V0.1 terminée avec succès !"
+log_success "Installation complète et vérifiée d'OpenNDR V0.1 terminée !"
 echo "======================================================================"
 echo ""
-echo "Prochaines étapes indispensables :"
+echo "Prochaines étapes de mise en service :"
 echo "1. Initialiser le premier administrateur (obligatoire avant premier démarrage) :"
 echo "   openndr-admin create-first-admin --email admin@votre-domaine.local --full-name 'Admin SOC'"
 echo ""
@@ -285,10 +310,10 @@ echo "2. Démarrer les services OpenNDR :"
 echo "   sudo systemctl start openndr-backend"
 echo "   sudo systemctl start openndr-engine"
 echo ""
-echo "3. Consulter les statuts et journaux :"
+echo "3. Vérifier l'état réel des services :"
 echo "   sudo systemctl status openndr-backend"
-echo "   sudo journalctl -u openndr-backend -f"
+echo "   sudo systemctl status openndr-engine"
 echo ""
-echo "4. Accéder à la console Web sur : http://<IP_SERVEUR>/"
+echo "4. Accéder à l'interface d'exploitation Web sur : http://<IP_SERVEUR>/"
 echo "======================================================================"
 exit 0

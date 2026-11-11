@@ -6,6 +6,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
+import os, { NetworkInterfaceInfo } from 'os';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -487,43 +489,117 @@ app.get('/api/v1/system/status', requireAuth, requirePermission('system:view'), 
 });
 
 app.get('/api/v1/system/interfaces', requireAuth, requirePermission('interfaces:view'), (_req, res) => {
-  res.json([
-    {
-      id: 1,
-      name: 'eth0',
-      role: 'ADMINISTRATION',
-      ip_address: '192.168.10.15/24',
-      mac_address: '52:54:00:12:34:56',
-      is_promiscuous: false,
+  const netIfaces = os.networkInterfaces();
+  const result = [];
+  let idx = 1;
+
+  for (const [name, rawAddrs] of Object.entries(netIfaces)) {
+    const addrs = rawAddrs as NetworkInterfaceInfo[] | undefined;
+    if (!addrs || addrs.length === 0) continue;
+    const mac = addrs[0]?.mac || '00:00:00:00:00:00';
+    const ipv4s = addrs.filter((a: NetworkInterfaceInfo) => a.family === 'IPv4').map((a: NetworkInterfaceInfo) => a.cidr || a.address);
+    const ipv6s = addrs.filter((a: NetworkInterfaceInfo) => a.family === 'IPv6').map((a: NetworkInterfaceInfo) => a.cidr || a.address);
+    const role = name === 'eth1' ? 'CAPTURE_PASSIVE' : name === 'lo' ? 'LOOPBACK' : 'ADMINISTRATION';
+    const isCapture = role === 'CAPTURE_PASSIVE';
+    const stealthCompliant = isCapture ? ipv4s.length === 0 && ipv6s.length === 0 : true;
+
+    result.push({
+      id: idx++,
+      name,
+      role,
+      ip_address: ipv4s[0] || null,
+      mac_address: mac,
+      is_promiscuous: isCapture,
       is_up: true,
       mtu: 1500,
       speed_mbps: 1000,
       rx_dropped: 0,
-      is_stealth_compliant: true,
-    },
-    {
-      id: 2,
-      name: 'eth1',
-      role: 'CAPTURE_PASSIVE',
-      ip_address: null, // Strict stealth mode
-      mac_address: '52:54:00:ab:cd:ef',
-      is_promiscuous: true,
-      is_up: true,
-      mtu: 9000,
-      speed_mbps: 10000,
-      rx_dropped: 0,
-      is_stealth_compliant: true,
-    },
-  ]);
+      is_stealth_compliant: stealthCompliant,
+      ipv4_addresses: ipv4s,
+      ipv6_addresses: ipv6s,
+    });
+  }
+
+  res.json(result);
+});
+
+app.get('/api/v1/system/interfaces/isolation-check', requireAuth, requirePermission('interfaces:view'), (_req, res) => {
+  const netIfaces = os.networkInterfaces();
+  const captureIface = netIfaces['eth1'] as NetworkInterfaceInfo[] | undefined;
+
+  if (!captureIface) {
+    return res.json({
+      interface: 'eth1',
+      status: 'NOT_CONFIGURED',
+      is_isolated: false,
+      has_ip: false,
+      has_routes: false,
+      is_promiscuous: false,
+      details: "L'interface de capture passive 'eth1' n'existe pas sur le système hôte.",
+    });
+  }
+
+  const ips = captureIface.map((a: NetworkInterfaceInfo) => a.address);
+  const hasIp = ips.length > 0;
+
+  if (hasIp) {
+    return res.json({
+      interface: 'eth1',
+      status: 'ISOLATION_BREACHED',
+      is_isolated: false,
+      has_ip: true,
+      has_routes: false,
+      is_promiscuous: false,
+      details: `Violation d'isolation furtive : l'interface passive possède des adresses IP configurées (${ips.join(', ')}).`,
+    });
+  }
+
+  res.json({
+    interface: 'eth1',
+    status: 'CONFORME_ISOLATED',
+    is_isolated: true,
+    has_ip: false,
+    has_routes: false,
+    is_promiscuous: true,
+    details: 'Conformité d\'isolation validée : mode furtif actif, aucune adresse IP assignée.',
+  });
 });
 
 app.get('/api/v1/system/storage', requireAuth, requirePermission('system:view'), (_req, res) => {
+  const pcapDir = '/var/lib/openndr/captures';
+  let pcapUsedBytes = 0;
+  let pcapFileCount = 0;
+  let status = 'READY';
+
+  if (!fs.existsSync(pcapDir)) {
+    status = 'NOT_CREATED';
+  } else {
+    try {
+      const files = fs.readdirSync(pcapDir);
+      for (const f of files) {
+        const stat = fs.statSync(path.join(pcapDir, f));
+        if (stat.isFile()) {
+          pcapUsedBytes += stat.size;
+          pcapFileCount++;
+        }
+      }
+    } catch {
+      status = 'PERMISSION_DENIED';
+    }
+  }
+
+  const pcapUsedGb = Number((pcapUsedBytes / (1024 ** 3)).toFixed(4));
+  const maxStorageGb = 500;
+  const usedStoragePercent = maxStorageGb > 0 ? Number(((pcapUsedGb / maxStorageGb) * 100).toFixed(2)) : 0;
+
   res.json({
-    pcapDirectory: '/var/lib/openndr/captures',
-    maxStorageGb: 500,
-    usedStorageGb: 14.2,
+    pcapDirectory: pcapDir,
+    maxStorageGb,
+    usedStorageGb: pcapUsedGb,
+    usedStoragePercent,
     retentionDays: 30,
-    maxFileDurationMin: 60,
+    pcapFilesCount: pcapFileCount,
+    status,
     integrityCheckEnabled: true,
   });
 });

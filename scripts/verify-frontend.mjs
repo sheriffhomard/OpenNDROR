@@ -56,6 +56,7 @@ const requiredMethods = [
   'deleteUser',
   'getSystemStatus',
   'getInterfaces',
+  'getIsolationCheck',
   'getStorage',
   'getAuditLogs',
   'getLiveness',

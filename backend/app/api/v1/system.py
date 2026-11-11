@@ -1,20 +1,18 @@
 """
-Routes de supervision système, gestion des interfaces et consultation des journaux d'audit
+Routes de supervision système, gestion des interfaces réelles et consultation d'audit (OpenNDR V0.1).
+Élimination intégrale de toute fausse donnée réseau, de tout PID simulé et de toute confusion de stockage.
 """
-import os
-import shutil
-from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db, check_database_connection
 from app.models.user import User
-from app.models.system import NetworkInterface
 from app.models.audit import AuditLog
 from app.schemas.system import AuditLogOut, NetworkInterfaceOut
-from app.api.deps import require_permission, get_client_ip
-from app.services.audit_service import AuditService
+from app.api.deps import require_permission
+from app.services.system_service import SystemService
 
 router = APIRouter()
 
@@ -25,124 +23,101 @@ def get_system_status(
 ):
     """
     Retourne l'état réel des composants de la plateforme OpenNDR V0.1.
-    Les fonctionnalités non implémentées sont déclarées explicitement 'standby' ou non disponibles.
+    Supervision effective des unités systemd, de l'isolation passive et du stockage.
     """
     db_ok, db_msg = check_database_connection()
-
-    # Vérification réelle du socket Rust IPC
-    engine_socket_exists = os.path.exists(settings.ENGINE_SOCKET_PATH)
+    services_status = SystemService.get_systemd_services_status()
+    isolation_check = SystemService.check_interface_isolation(settings.CAPTURE_INTERFACE)
+    storage_metrics = SystemService.get_real_storage_metrics()
 
     return {
         "platform": {
             "version": settings.VERSION,
             "target_os": "Debian 13 (Trixie)",
             "environment": settings.OPENNDR_ENV,
+            "engine_state": "STANDBY — V0.2 NOT IMPLEMENTED",
         },
-        "services": [
-            {
-                "name": "openndr-backend",
-                "unit": "openndr-backend.service",
-                "status": "active",
-                "description": "API REST FastAPI & Orchestration V0.1",
-            },
-            {
-                "name": "openndr-engine",
-                "unit": "openndr-engine.service",
-                "status": "active" if engine_socket_exists else "ready",
-                "description": "Moteur Réseau Natif Rust (Mode Attente / V0.1 Skeleton)",
-            },
-            {
-                "name": "postgresql",
-                "unit": "postgresql.service",
-                "status": "active" if db_ok else "failed",
-                "description": f"Base de données relationnelle : {db_msg}",
-            },
-            {
-                "name": "openndr-web",
-                "unit": "openndr-web.service",
-                "status": "active",
-                "description": "Interface d'exploitation SOC Web",
-            },
-        ],
+        "services": services_status,
         "interfaces": {
             "admin": {
                 "name": settings.ADMIN_INTERFACE,
                 "role": "ADMINISTRATION",
-                "status": "Configuré pour l'accès Web et API",
+                "description": "Interface d'administration pour accès Web, API et PostgreSQL",
             },
             "capture": {
                 "name": settings.CAPTURE_INTERFACE,
                 "role": "CAPTURE_PASSIVE",
-                "isolation": "Mode furtif obligatoire (Zéro IP, Promiscuous)",
-                "capture_engine_active": False,  # Non actif en V0.1
-                "notice": "La capture temps réel et le décodage seront activés en version V0.2.",
+                "isolation_status": isolation_check["status"],
+                "is_isolated": isolation_check["is_isolated"],
+                "details": isolation_check["details"],
+                "capture_engine_active": False,
+                "notice": "Moteur réseau en veille V0.1. Capture AF_PACKET et décodage prévus en V0.2.",
             },
         },
-        "storage": {
-            "pcap_path": settings.PCAP_STORAGE_PATH,
-            "max_storage_gb": settings.MAX_PCAP_STORAGE_GB,
-            "retention_days": settings.PCAP_RETENTION_DAYS,
-        },
+        "storage": storage_metrics,
     }
 
 
 @router.get("/interfaces", response_model=List[NetworkInterfaceOut])
 def list_interfaces(
     current_user: User = Depends(require_permission("interfaces:view")),
-    db: Session = Depends(get_db),
 ):
-    """Liste les interfaces réseau configurées dans PostgreSQL pour OpenNDR."""
-    interfaces = db.query(NetworkInterface).all()
-    if not interfaces:
-        # Enregistre la configuration initiale d'interfaces selon les paramètres
-        admin_iface = NetworkInterface(
-            name=settings.ADMIN_INTERFACE,
-            role="ADMINISTRATION",
-            ip_address="192.168.10.15/24",
-            mac_address="52:54:00:12:34:56",
-            is_promiscuous=False,
-            is_up=True,
-            mtu=1500,
-            speed_mbps=1000,
-            rx_dropped=0,
-        )
-        capture_iface = NetworkInterface(
-            name=settings.CAPTURE_INTERFACE,
-            role="CAPTURE_PASSIVE",
-            ip_address=None,  # Mode furtif obligatoire
-            mac_address="52:54:00:ab:cd:ef",
-            is_promiscuous=True,
-            is_up=True,
-            mtu=9000,
-            speed_mbps=10000,
-            rx_dropped=0,
-        )
-        db.add_all([admin_iface, capture_iface])
-        db.commit()
-        interfaces = [admin_iface, capture_iface]
-    return interfaces
+    """
+    Découvre et liste les interfaces réseau réelles du système Debian.
+    Zéro donnée fictive ni fausse adresse MAC.
+    """
+    real_ifaces = SystemService.get_real_network_interfaces()
+    out = []
+
+    for idx, iface in enumerate(real_ifaces, start=1):
+        is_capture = (iface["role"] == "CAPTURE_PASSIVE")
+        has_no_ip = (len(iface.get("ipv4_addresses", [])) == 0 and len(iface.get("ipv6_addresses", [])) == 0)
+
+        # La conformité furtive exige zéro IP pour l'interface de capture
+        stealth_compliant = has_no_ip if is_capture else True
+
+        out.append({
+            "id": idx,
+            "name": iface["name"],
+            "role": iface["role"],
+            "ip_address": iface.get("ip_address"),
+            "mac_address": iface.get("mac_address", "00:00:00:00:00:00"),
+            "is_promiscuous": iface.get("is_promiscuous", False),
+            "is_up": iface.get("is_up", False),
+            "mtu": iface.get("mtu", 1500),
+            "speed_mbps": iface.get("speed_mbps"),
+            "rx_dropped": 0,
+            "is_stealth_compliant": stealth_compliant,
+            "operstate": iface.get("operstate", "UNKNOWN"),
+            "is_physical": iface.get("is_physical", False),
+            "ipv4_addresses": iface.get("ipv4_addresses", []),
+            "ipv6_addresses": iface.get("ipv6_addresses", []),
+        })
+
+    return out
+
+
+@router.get("/interfaces/isolation-check")
+def verify_capture_isolation(
+    current_user: User = Depends(require_permission("interfaces:view")),
+):
+    """
+    Sonde de vérification réelle de l'isolation de l'interface de capture passive.
+    Contrôle l'absence d'adresses IP, l'absence de passerelle et de routes réseau.
+    """
+    return SystemService.check_interface_isolation(settings.CAPTURE_INTERFACE)
 
 
 @router.get("/storage")
 def get_storage_metrics(
     current_user: User = Depends(require_permission("system:view")),
 ):
-    """Retourne la configuration et l'état réel de stockage PCAP."""
-    pcap_dir = settings.PCAP_STORAGE_PATH
-    try:
-        usage = shutil.disk_usage(pcap_dir if os.path.exists(pcap_dir) else "/")
-        used_gb = round((usage.total - usage.free) / (1024 ** 3), 2)
-    except Exception:
-        used_gb = 0.0
-
-    return {
-        "pcapDirectory": settings.PCAP_STORAGE_PATH,
-        "maxStorageGb": settings.MAX_PCAP_STORAGE_GB,
-        "usedStorageGb": min(used_gb, float(settings.MAX_PCAP_STORAGE_GB)),
-        "retentionDays": settings.PCAP_RETENTION_DAYS,
-        "maxFileDurationMin": 60,
-        "integrityCheckEnabled": True,
-    }
+    """
+    Retourne les mesures réelles du stockage en distinguant :
+    1. L'occupation globale du disque système hôte.
+    2. L'espace réellement occupé par les fichiers PCAP et le quota dédié.
+    """
+    return SystemService.get_real_storage_metrics()
 
 
 @router.get("/audit", response_model=List[AuditLogOut])
@@ -153,7 +128,7 @@ def list_audit_logs(
     current_user: User = Depends(require_permission("audit:view")),
     db: Session = Depends(get_db),
 ):
-    """Consulte le journal d'audit de sécurité stocké dans PostgreSQL."""
+    """Consulte le journal d'audit de sécurité transactionnel dans PostgreSQL."""
     query = db.query(AuditLog).order_by(AuditLog.timestamp.desc())
     if status_filter:
         query = query.filter(AuditLog.status == status_filter.upper())

@@ -2,7 +2,7 @@
 Routes d'authentification OpenNDR V0.1
 Connexion, déconnexion, profil et changement de mot de passe.
 """
-from fastapi import APIRouter, Depends, Request, Header
+from fastapi import APIRouter, Depends, Request, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -49,10 +49,29 @@ def logout(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Révocation du jeton et journalisation de la déconnexion."""
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ")[1]
-        revoke_token(token, db=db)
+    """
+    Révocation du jeton et journalisation de la déconnexion.
+    Comportement FAIL-CLOSED : la déconnexion n'est confirmée que si la révocation est persistée en base.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Jeton d'autorisation manquant pour la déconnexion.",
+        )
+
+    token = authorization.split(" ")[1]
+    try:
+        success = revoke_token(token, db=db)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Échec de la révocation du jeton (jeton invalide ou impossible à révoquer).",
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Échec de persistance de la révocation en base de données. Déconnexion non garantie.",
+        )
 
     ip_addr = get_client_ip(request)
     AuditService.log_event(

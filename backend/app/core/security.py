@@ -150,61 +150,90 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     return f"{header_b64}.{payload_b64}.{sig_b64}"
 
 
+class DatabaseSecurityError(Exception):
+    """Exception levée en cas d'erreur de base de données durant un contrôle de sécurité critique."""
+    pass
+
+
 def is_token_revoked(jti: str, db: Optional[Session] = None) -> bool:
-    """Vérifie si un jeton a été révoqué en mémoire ou dans PostgreSQL."""
-    if jti in REVOKED_TOKENS:
-        return True
-    if db is not None:
-        try:
-            from app.models.user import RevokedToken
-            rev = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
-            if rev:
-                REVOKED_TOKENS.add(jti)
-                return True
-        except Exception:
-            pass
-    return False
+    """
+    Vérifie si un jeton a été révoqué dans la table PostgreSQL `revoked_tokens`.
+    Comportement FAIL-CLOSED impératif : en cas d'indisponibilité de la base,
+    l'accès n'est JAMAIS accordé et une exception critique est propagée.
+    """
+    if db is None:
+        if settings.OPENNDR_ENV.lower() == "production":
+            raise DatabaseSecurityError(
+                "Contrôle de sécurité impossible : session PostgreSQL manquante en environnement de production."
+            )
+        return False
+
+    try:
+        from app.models.user import RevokedToken
+        rev = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
+        return rev is not None
+    except Exception as e:
+        # FAIL-CLOSED : ne jamais transformer une erreur DB en absence de révocation
+        raise DatabaseSecurityError(
+            f"Échec critique du contrôle de révocation JWT en base de données : {e}"
+        )
 
 
 def revoke_token(token: str, db: Optional[Session] = None) -> bool:
-    """Révoque un jeton actif et enregistre l'invalidation dans PostgreSQL."""
-    payload = decode_token(token)
-    if payload and "jti" in payload:
-        jti = payload["jti"]
-        REVOKED_TOKENS.add(jti)
-        if db is not None:
-            try:
-                from app.models.user import RevokedToken
-                user_id = payload.get("sub")
-                exp_ts = payload.get("exp")
-                expires_at = (
-                    datetime.fromtimestamp(exp_ts, tz=timezone.utc)
-                    if exp_ts
-                    else datetime.now(timezone.utc)
-                )
+    """
+    Révoque un jeton actif et persiste l'invalidation dans PostgreSQL.
+    Comportement FAIL-CLOSED : échoue avec DatabaseSecurityError si l'écriture ne peut être garantie.
+    """
+    payload = decode_token(token, db=db, check_revocation=False)
+    if not payload or "jti" not in payload:
+        return False
 
-                existing = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
-                if not existing:
-                    entry = RevokedToken(
-                        jti=jti,
-                        user_id=user_id,
-                        revoked_at=datetime.now(timezone.utc),
-                        expires_at=expires_at,
-                    )
-                    db.add(entry)
-                    db.commit()
+    jti = payload["jti"]
+    user_id = payload.get("sub")
+    exp_ts = payload.get("exp")
+    expires_at = (
+        datetime.fromtimestamp(exp_ts, tz=timezone.utc)
+        if exp_ts
+        else datetime.now(timezone.utc)
+    )
 
-                # Nettoyage opportuniste des anciens jetons révoqués dont l'expiration naturelle est dépassée
-                now = datetime.now(timezone.utc)
-                db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
-                db.commit()
-            except Exception:
-                db.rollback()
+    if db is None:
+        if settings.OPENNDR_ENV.lower() == "production":
+            raise DatabaseSecurityError(
+                "Impossible de révoquer le jeton sans session PostgreSQL persistante."
+            )
         return True
-    return False
+
+    try:
+        from app.models.user import RevokedToken
+        existing = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
+        if not existing:
+            entry = RevokedToken(
+                jti=jti,
+                user_id=user_id,
+                revoked_at=datetime.now(timezone.utc),
+                expires_at=expires_at,
+            )
+            db.add(entry)
+            db.commit()
+
+        # Nettoyage opportuniste des anciens jetons révoqués dont l'expiration naturelle est dépassée
+        now = datetime.now(timezone.utc)
+        db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        raise DatabaseSecurityError(
+            f"Échec de persistance de la révocation du jeton dans PostgreSQL : {e}"
+        )
 
 
-def decode_token(token: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+def decode_token(
+    token: str,
+    db: Optional[Session] = None,
+    check_revocation: bool = True,
+) -> Optional[Dict[str, Any]]:
     """
     Décodage et vérification stricte d'un jeton JWT :
     - Algorithme autorisé ('HS256')
@@ -215,7 +244,7 @@ def decode_token(token: str, db: Optional[Session] = None) -> Optional[Dict[str,
     - Émetteur 'iss' ('openndr')
     - Audience 'aud' ('openndr-api')
     - Sujet 'sub'
-    - Vérification de non-révocation persistante
+    - Vérification de non-révocation persistante (FAIL-CLOSED)
     """
     try:
         parts = token.split(".")
@@ -268,10 +297,13 @@ def decode_token(token: str, db: Optional[Session] = None) -> Optional[Dict[str,
         if not jti:
             return None
 
-        # Contrôle de révocation persistante
-        if is_token_revoked(jti, db):
+        # Contrôle de révocation persistante PostgreSQL (FAIL-CLOSED)
+        if check_revocation and is_token_revoked(jti, db):
             return None
 
         return payload
+    except DatabaseSecurityError:
+        # Re-propagation impérative pour comportement fail-closed
+        raise
     except Exception:
         return None

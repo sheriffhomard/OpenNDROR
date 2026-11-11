@@ -21,6 +21,7 @@ app/schemas/system.py
 app/schemas/user.py
 app/services/audit_service.py
 app/services/auth_service.py
+app/services/system_service.py
 app/services/user_service.py
 openndr_backend.egg-info/PKG-INFO
 openndr_backend.egg-info/SOURCES.txt

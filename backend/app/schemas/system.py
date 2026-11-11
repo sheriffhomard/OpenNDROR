@@ -30,7 +30,7 @@ class ReadinessOut(BaseModel):
 class NetworkInterfaceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: Optional[int] = None
     name: str
     role: str
     ip_address: Optional[str] = None
@@ -38,9 +38,13 @@ class NetworkInterfaceOut(BaseModel):
     is_promiscuous: bool
     is_up: bool
     mtu: int
-    speed_mbps: int
-    rx_dropped: int
-    is_stealth_compliant: bool
+    speed_mbps: Optional[int] = None
+    rx_dropped: int = 0
+    is_stealth_compliant: bool = False
+    operstate: Optional[str] = None
+    is_physical: Optional[bool] = False
+    ipv4_addresses: Optional[List[str]] = None
+    ipv6_addresses: Optional[List[str]] = None
 
 
 class AuditLogOut(BaseModel):

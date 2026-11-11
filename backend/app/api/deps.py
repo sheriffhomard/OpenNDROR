@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status, Header, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import decode_token, DatabaseSecurityError
 from app.models.user import User
 
 
@@ -28,6 +28,7 @@ def get_current_user(
     """
     Extrait et valide le jeton JWT.
     Vérifie l'existence et l'état actif du compte dans PostgreSQL.
+    Comportement FAIL-CLOSED : en cas d'erreur DB sur la révocation, l'accès est refusé avec 503.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -37,7 +38,15 @@ def get_current_user(
         )
 
     token = authorization.split(" ")[1]
-    payload = decode_token(token, db=db)
+    try:
+        payload = decode_token(token, db=db)
+    except DatabaseSecurityError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service d'authentification indisponible (contrôle de révocation impossible).",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -69,12 +69,70 @@ class TestSecurityV01(unittest.TestCase):
         self.assertIsNone(decode_token(tampered))
 
     def test_jwt_revocation(self):
-        payload = {"sub": "usr-revoke-test", "role": "Observer"}
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from app.core.database import Base
+        test_engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(bind=test_engine)
+        TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+        db = TestingSessionLocal()
+        try:
+            payload = {"sub": "usr-revoke-test", "role": "Observer"}
+            token = create_access_token(payload)
+            self.assertIsNotNone(decode_token(token, db=db))
+            revoked = revoke_token(token, db=db)
+            self.assertTrue(revoked)
+            self.assertIsNone(decode_token(token, db=db), "Un jeton révoqué en base ne doit plus être décodable")
+        finally:
+            db.close()
+            test_engine.dispose()
+
+    def test_fail_closed_token_revocation_on_db_error(self):
+        from unittest.mock import MagicMock
+        from app.core.security import DatabaseSecurityError, is_token_revoked
+
+        # Mock d'une session de base de données défaillante (ex: coupure réseau PostgreSQL)
+        mock_db = MagicMock()
+        mock_db.query.side_effect = Exception("Connexion PostgreSQL perdue (OperationalError)")
+
+        # Le comportement FAIL-CLOSED exige de lever DatabaseSecurityError
+        # et de NE JAMAIS considérer le jeton comme valide par défaut
+        with self.assertRaises(DatabaseSecurityError):
+            is_token_revoked("test-jti-12345", db=mock_db)
+
+        # decode_token doit également propager DatabaseSecurityError pour déclencher un refus HTTP 503
+        payload = {"sub": "usr-failclosed-test", "role": "Observer"}
         token = create_access_token(payload)
-        self.assertIsNotNone(decode_token(token))
-        revoked = revoke_token(token)
-        self.assertTrue(revoked)
-        self.assertIsNone(decode_token(token), "Un jeton révoqué ne doit plus être décodable")
+        with self.assertRaises(DatabaseSecurityError):
+            decode_token(token, db=mock_db)
+
+    def test_revoke_token_fails_closed_on_db_error(self):
+        from unittest.mock import MagicMock
+        from app.core.security import DatabaseSecurityError
+
+        mock_db = MagicMock()
+        mock_db.query.side_effect = Exception("Erreur d'écriture disque PostgreSQL")
+
+        payload = {"sub": "usr-logout-fail", "role": "Analyst"}
+        token = create_access_token(payload)
+
+        # Une déconnexion ne doit jamais annoncer une réussite si non persistée
+        with self.assertRaises(DatabaseSecurityError):
+            revoke_token(token, db=mock_db)
+
+    def test_cli_bootstrap_refuses_unmigrated_db(self):
+        from unittest.mock import patch
+        from app.cli import check_database_migrated
+
+        # Simule une base où les tables n'ont pas encore été créées par Alembic
+        with patch("app.cli.inspect") as mock_inspect:
+            mock_inspector = mock_inspect.return_value
+            mock_inspector.get_table_names.return_value = ["some_other_table"]
+
+            # check_database_migrated doit refuser le bootstrap avec sys.exit(1)
+            with self.assertRaises(SystemExit) as cm:
+                check_database_migrated()
+            self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":

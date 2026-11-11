@@ -236,25 +236,32 @@ export const ValidationView: React.FC = () => {
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Mauvais identifiants: ${msg}`]);
     }
 
-    // Test 6: Conformité furtive
+    // Test 6: Conformité d'isolation réseau réelle
     updateTest('probe-stealth-check', { status: 'running' });
     const t5 = performance.now();
     try {
-      const statusRes = await apiService.getSystemStatus();
+      const isolationRes = await apiService.getIsolationCheck();
       const dur = Math.round(performance.now() - t5);
-      const captureIface = statusRes.interfaces.capture;
-      if (captureIface) {
+      if (isolationRes.is_isolated) {
         updateTest('probe-stealth-check', {
           status: 'passed',
           durationMs: dur,
-          details: `Interface ${captureIface.name} isolée : ${captureIface.isolation}`,
+          details: `Interface ${isolationRes.interface} conforme (${isolationRes.status}) : ${isolationRes.details}`,
         });
         setConsoleLogs((prev) => [
           ...prev,
-          `[✓ PASS] Isolation Furtive (${dur}ms): ${captureIface.name} sans IP.`,
+          `[✓ PASS] Isolation Réseau Réelle (${dur}ms): ${isolationRes.details}`,
         ]);
       } else {
-        throw new Error('Interface de capture introuvable');
+        updateTest('probe-stealth-check', {
+          status: 'failed',
+          durationMs: dur,
+          details: `État ${isolationRes.status} : ${isolationRes.details}`,
+        });
+        setConsoleLogs((prev) => [
+          ...prev,
+          `[✗ FAIL] Isolation Réseau Réelle (${dur}ms): État ${isolationRes.status} - ${isolationRes.details}`,
+        ]);
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t5);

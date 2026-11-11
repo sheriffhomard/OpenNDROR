@@ -59,8 +59,12 @@ class TestApiAndDatabaseV01(unittest.TestCase):
     def tearDownClass(cls):
         cls.db.close()
         Base.metadata.drop_all(bind=engine)
+        engine.dispose()
         if os.path.exists("./test_openndr.db"):
-            os.remove("./test_openndr.db")
+            try:
+                os.remove("./test_openndr.db")
+            except OSError:
+                pass
 
     def test_health_endpoints(self):
         # Liveness
@@ -190,6 +194,88 @@ class TestApiAndDatabaseV01(unittest.TestCase):
             headers={"Authorization": f"Bearer {token_admin}"},
         )
         self.assertEqual(res_del_again.status_code, 404)
+
+    def test_real_interfaces_and_isolation_check(self):
+        token_admin = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@test.local", "password": "AdminSecurePass2026!"},
+        ).json()["access_token"]
+
+        # 1. Vérification de la liste réelle des interfaces
+        res_ifaces = self.client.get(
+            "/api/v1/system/interfaces",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(res_ifaces.status_code, 200)
+        ifaces = res_ifaces.json()
+        self.assertIsInstance(ifaces, list)
+        self.assertGreaterEqual(len(ifaces), 1)
+
+        # Aucune fausse adresse MAC hardcodée
+        for iface in ifaces:
+            self.assertNotEqual(iface["mac_address"], "52:54:00:12:34:56")
+            self.assertNotEqual(iface["mac_address"], "52:54:00:ab:cd:ef")
+
+        # 2. Vérification de la sonde d'isolation
+        res_iso = self.client.get(
+            "/api/v1/system/interfaces/isolation-check",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(res_iso.status_code, 200)
+        iso_data = res_iso.json()
+        self.assertIn("status", iso_data)
+        self.assertIn("is_isolated", iso_data)
+        self.assertIn(iso_data["status"], ["CONFORME_ISOLATED", "NOT_CONFIGURED", "ISOLATION_BREACHED", "ROUTING_BREACHED", "CONFIG_CONFLICT"])
+
+    def test_storage_separation_metrics(self):
+        token_admin = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@test.local", "password": "AdminSecurePass2026!"},
+        ).json()["access_token"]
+
+        res_storage = self.client.get(
+            "/api/v1/system/storage",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(res_storage.status_code, 200)
+        data = res_storage.json()
+
+        # Vérification de la séparation stricte : filesystem vs pcap_storage
+        self.assertIn("filesystem", data)
+        self.assertIn("pcap_storage", data)
+        self.assertGreater(data["filesystem"]["total_gb"], 0)
+        self.assertIn("used_bytes", data["pcap_storage"])
+        self.assertIn("quota_gb", data["pcap_storage"])
+
+    def test_logout_and_revocation_enforcement(self):
+        # 1. Login
+        login_res = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "analyst@test.local", "password": "AnalystSecurePass2026!"},
+        )
+        token = login_res.json()["access_token"]
+
+        # 2. Requête réussie avec le jeton
+        res_me = self.client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(res_me.status_code, 200)
+
+        # 3. Déconnexion
+        res_logout = self.client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(res_logout.status_code, 200)
+        self.assertEqual(res_logout.json()["message"], "Déconnexion réussie")
+
+        # 4. Requête ultérieure avec le jeton révoqué : impérativement rejetée (401)
+        res_me_after = self.client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(res_me_after.status_code, 401)
 
 
 if __name__ == "__main__":

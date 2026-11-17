@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="maskBg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0b0f17" />
+      <stop offset="55%" stop-color="#0b1f24" />
+      <stop offset="100%" stop-color="#064e3b" />
+    </linearGradient>
+    <linearGradient id="shieldStrokeM" x1="156" y1="108" x2="356" y2="404" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed background for Android maskable safe zone -->
+  <rect width="512" height="512" fill="url(#maskBg)" />
+
+  <!-- Shield safely scaled inside central 72% zone -->
+  <path
+    d="M256 112L368 154V246C368 318 320 374 256 398C192 374 144 318 144 246V154L256 112Z"
+    fill="#09111a"
+    fill-opacity="0.88"
+    stroke="url(#shieldStrokeM)"
+    stroke-width="12"
+    stroke-linejoin="round"
+  />
+
+  <circle cx="256" cy="248" r="60" stroke="#10b981" stroke-opacity="0.25" stroke-width="3.5" stroke-dasharray="6 6" />
+  <path
+    d="M172 250H206L228 206L254 292L280 222L298 250H340"
+    stroke="#34d399"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="172" cy="250" r="8" fill="#38bdf8" />
+  <circle cx="340" cy="250" r="8" fill="#34d399" />
+  <circle cx="254" cy="292" r="7" fill="#ffffff" />
+</svg>

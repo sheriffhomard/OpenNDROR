@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { EngineTelemetry, PacketSummary, PcapIngestionResult, ProtocolStats } from '../types/system';
 import { apiService } from '../services/api';
+import { HelpTooltip } from './HelpTooltip';
 
 interface CaptureViewProps {
   telemetry: EngineTelemetry | null;
@@ -76,7 +77,6 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
   const captureMode = telemetry?.capture_mode || 'STANDBY';
   const stats = telemetry?.protocol_stats || EMPTY_PROTOCOL_STATS;
 
-  // Merge packets from the latest ingested trace and live engine telemetry
   const displayedPackets: PacketSummary[] = useMemo(() => {
     if (lastIngestion?.packet_summaries && lastIngestion.packet_summaries.length > 0) {
       return lastIngestion.packet_summaries;
@@ -114,11 +114,11 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
   );
 
   const protocolBreakdown = [
-    { label: 'TCP', count: stats.tcp_packets, barClass: 'bg-sky-500' },
-    { label: 'UDP', count: stats.udp_packets, barClass: 'bg-emerald-500' },
-    { label: 'ICMP (v4/v6)', count: stats.icmp_packets, barClass: 'bg-amber-500' },
-    { label: 'ARP', count: stats.arp_packets, barClass: 'bg-violet-500' },
-    { label: 'Other L2/L3', count: stats.other_packets, barClass: 'bg-slate-500' },
+    { label: 'TCP', count: stats.tcp_packets, barClass: 'bg-sky-500', tip: 'Connection-oriented transport traffic (HTTP, SSH, TLS, databases).' },
+    { label: 'UDP', count: stats.udp_packets, barClass: 'bg-emerald-500', tip: 'Connectionless fast transport traffic (DNS, DHCP, NTP, streaming).' },
+    { label: 'ICMP (v4/v6)', count: stats.icmp_packets, barClass: 'bg-amber-500', tip: 'Network diagnostic and control packets such as ping and unreachable notices.' },
+    { label: 'ARP', count: stats.arp_packets, barClass: 'bg-violet-500', tip: 'Local Layer 2 address resolution mapping IP addresses to MAC addresses.' },
+    { label: 'Other L2/L3', count: stats.other_packets, barClass: 'bg-slate-500', tip: 'Unclassified Ethernet or Layer 3 control frames.' },
   ];
 
   const handleToggleCapture = async () => {
@@ -187,30 +187,34 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Capture Engine V0.2 Control Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-slate-100">
-                Passive Capture Engine & L2–L4 Decoding
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Passive Capture Engine &amp; L2–L4 Decoding
               </h2>
-              <span className="text-xs text-slate-500">·</span>
-              <span className="text-xs font-mono text-slate-300">
+              <HelpTooltip
+                title="Capture & L2–L4 Engine"
+                description="Controls the native Rust packet engine. You can start passive live listening on eth1 or upload saved .pcap/.pcapng traces for immediate inspection."
+              />
+              <span className="text-xs text-slate-400 dark:text-slate-500">·</span>
+              <span className="text-xs font-mono text-slate-700 dark:text-slate-300">
                 Version {telemetry?.engine_version || '0.2.0'}
               </span>
-              <span className="text-xs text-slate-500">·</span>
-              <span className={`text-xs font-mono font-medium ${isRunning ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <span className="text-xs text-slate-400 dark:text-slate-500">·</span>
+              <span className={`text-xs font-mono font-medium ${isRunning ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                 {isRunning ? `ACTIVE (${captureMode})` : 'STANDBY'}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span>Interface: {telemetry?.active_interface || 'eth1 (passive)'}</span>
               <span aria-hidden="true">·</span>
               <span>Pipeline: Ethernet II / 802.1Q / IPv4 / IPv6 / ARP / ICMP / TCP / UDP</span>
               {telemetry?.last_capture_file && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span className="font-mono text-slate-300 truncate max-w-md" title={telemetry.last_capture_file}>
+                  <span className="font-mono text-slate-700 dark:text-slate-300 truncate max-w-md" title={telemetry.last_capture_file}>
                     Last file: {telemetry.last_capture_file}
                   </span>
                 </>
@@ -220,8 +224,9 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
 
           <div className="flex items-center gap-2 shrink-0">
             <button
+              type="button"
               onClick={() => onRefreshTelemetry()}
-              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
+              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh
@@ -229,6 +234,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
 
             {canManageCapture && (
               <button
+                type="button"
                 onClick={handleToggleCapture}
                 disabled={isActionLoading}
                 className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 ${
@@ -254,67 +260,73 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
         </div>
 
         {(errorDetail || telemetry?.socket_error) && (
-          <div className="mt-4 p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="mt-4 p-3 bg-amber-50 dark:bg-slate-950 border border-amber-300 dark:border-slate-800 rounded-lg text-xs text-amber-800 dark:text-slate-300 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
             <span>{errorDetail || telemetry?.socket_error}</span>
           </div>
         )}
       </div>
 
-      {/* Real-time KPIs (strictly real values, tabular-nums) */}
+      {/* Real-time KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Instant Throughput</div>
-          <div className="text-xl font-bold font-mono tabular-nums text-slate-100">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+          <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5">
+            <span>Instant Throughput</span>
+            <HelpTooltip title="Live Bitrate (Mbps)" description="Current network speed passing through the capture engine measured over a 1-second sliding window." />
+          </div>
+          <div className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
             {(telemetry?.current_mbps ?? 0).toFixed(3)} Mbps
           </div>
-          <div className="mt-1.5 text-xs text-slate-500">
-            1s sliding window measurement
-          </div>
+          <div className="mt-1.5 text-xs text-slate-500">1s sliding window measurement</div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Captured Packets / Drops</div>
-          <div className="text-xl font-bold font-mono tabular-nums text-emerald-400">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+          <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5">
+            <span>Captured Packets / Drops</span>
+            <HelpTooltip title="Packet Counter & Kernel Drops" description="Total packets read versus packets dropped if the Linux ring buffer fills faster than disk writes." />
+          </div>
+          <div className="text-xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
             {(telemetry?.packets_received ?? 0).toLocaleString('en-US')}
             <span className="text-slate-500 text-sm font-normal">
               {' / '}
               {(telemetry?.packets_dropped ?? 0).toLocaleString('en-US')} drop
             </span>
           </div>
-          <div className="mt-1.5 text-xs text-slate-500">
-            Kernel PACKET_STATISTICS counter
-          </div>
+          <div className="mt-1.5 text-xs text-slate-500">Kernel PACKET_STATISTICS counter</div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Processed Frame Volume</div>
-          <div className="text-xl font-bold font-mono tabular-nums text-slate-100">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+          <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5">
+            <span>Processed Frame Volume</span>
+            <HelpTooltip title="Total Bytes Decoded" description="Cumulative size of all Ethernet frames decoded by the Rust engine or ingested from PCAP traces." />
+          </div>
+          <div className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
             {formatBytes(telemetry?.bytes_processed ?? 0)}
           </div>
-          <div className="mt-1.5 text-xs text-slate-500">
-            Local rotating PCAP storage
-          </div>
+          <div className="mt-1.5 text-xs text-slate-500">Local rotating PCAP storage</div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Ring Buffer Saturation</div>
-          <div className="text-xl font-bold font-mono tabular-nums text-sky-400">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+          <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5">
+            <span>Ring Buffer Saturation</span>
+            <HelpTooltip title="TPACKET_V2 Ring Usage" description="Percentage of shared kernel memory currently queued for processing. Under 80% indicates healthy zero-drop capture." />
+          </div>
+          <div className="text-xl font-bold font-mono tabular-nums text-sky-600 dark:text-sky-400">
             {(telemetry?.ring_buffer_usage_pct ?? 0).toFixed(1)} %
           </div>
-          <div className="mt-1.5 text-xs text-slate-500">
-            Zero-copy TPACKET_V2 mmap ring
-          </div>
+          <div className="mt-1.5 text-xs text-slate-500">Zero-copy TPACKET_V2 mmap ring</div>
         </div>
       </div>
 
       {/* L2-L4 Protocol Breakdown & PCAP/PCAPNG Ingestion */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        {/* L2-L4 Breakdown */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">L2–L4 Protocol Breakdown</h3>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1 font-mono tabular-nums">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <span>L2–L4 Protocol Breakdown</span>
+              <HelpTooltip title="Protocol Distribution" description="Shows how your analyzed traffic breaks down across Layer 2 (ARP, VLAN), Layer 3 (IPv4, IPv6, ICMP), and Layer 4 (TCP, UDP)." />
+            </h3>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums">
               <span>IPv4: {stats.ipv4_packets.toLocaleString('en-US')}</span>
               <span aria-hidden="true">·</span>
               <span>IPv6: {stats.ipv6_packets.toLocaleString('en-US')}</span>
@@ -331,12 +343,15 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
               return (
                 <div key={row.label} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-300 font-medium">{row.label}</span>
-                    <span className="font-mono tabular-nums text-slate-400">
+                    <span className="text-slate-700 dark:text-slate-300 font-medium inline-flex items-center gap-1">
+                      <span>{row.label}</span>
+                      <HelpTooltip title={row.label} description={row.tip} align="left" />
+                    </span>
+                    <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
                       {row.count.toLocaleString('en-US')} ({pct}%)
                     </span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div className={`h-full ${row.barClass}`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
@@ -346,17 +361,23 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
         </div>
 
         {/* PCAP / PCAPNG File Ingestion & Analysis */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">PCAP / PCAPNG Trace Ingestion & Decoding</h3>
-            <p className="text-xs text-slate-400 mt-1">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <span>PCAP / PCAPNG Trace Ingestion &amp; Decoding</span>
+              <HelpTooltip title="Offline Trace Analysis" description="Upload a Wireshark/tcpdump capture file from your computer or enter an existing file path on the Debian server to decode packets." />
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
               Upload a local network capture file or specify a server path to run the Rust L2–L4 parser.
             </p>
           </div>
 
           <div className="space-y-3">
-            {/* Direct PCAP/PCAPNG file upload */}
             <div>
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                <span>Browser Upload (.pcap / .pcapng / .cap)</span>
+                <HelpTooltip title="Upload Local Capture File" description="Pick a packet trace file from your device. It is parsed once by openndr-engine and temporary files are immediately deleted." align="left" />
+              </div>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -370,8 +391,8 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                 htmlFor="pcap-upload-input"
                 className={`w-full px-4 py-2.5 rounded-lg border border-dashed text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
                   canManageCapture && !isIngesting
-                    ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300 hover:bg-emerald-950/40 cursor-pointer'
-                    : 'border-slate-700 bg-slate-950 text-slate-500 cursor-not-allowed'
+                    ? 'border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 cursor-pointer'
+                    : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-400 dark:text-slate-500 cursor-not-allowed'
                 }`}
               >
                 <Upload className="w-4 h-4 shrink-0" />
@@ -385,32 +406,37 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
               </label>
             </div>
 
-            {/* Ingestion via server file path */}
-            <form onSubmit={handleIngestServerFile} className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <FolderOpen className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={serverPathInput}
-                  onChange={(e) => setServerPathInput(e.target.value)}
-                  placeholder="/var/lib/openndr/captures/trace.pcap"
-                  disabled={!canManageCapture || isIngesting}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
-                />
+            <form onSubmit={handleIngestServerFile} className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                <span>Server Trace File Path</span>
+                <HelpTooltip title="Server File Ingestion" description="Full local filesystem path on the sensor host (for example /var/lib/openndr/captures/trace.pcap). Directory traversal (..) is blocked." align="left" />
               </div>
-              <button
-                type="submit"
-                disabled={!canManageCapture || isIngesting || !serverPathInput.trim()}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-100 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0"
-              >
-                Analyze path
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <FolderOpen className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={serverPathInput}
+                    onChange={(e) => setServerPathInput(e.target.value)}
+                    placeholder="/var/lib/openndr/captures/trace.pcap"
+                    disabled={!canManageCapture || isIngesting}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!canManageCapture || isIngesting || !serverPathInput.trim()}
+                  className="px-4 py-2 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 text-white dark:text-slate-100 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0"
+                >
+                  Analyze path
+                </button>
+              </div>
             </form>
           </div>
 
           {lastIngestion && (
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs space-y-1">
-              <div className="flex items-center justify-between text-emerald-400 font-medium">
+            <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs space-y-1">
+              <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-medium">
                 <span className="flex items-center gap-1.5 truncate">
                   <FileCheck2 className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">{lastIngestion.file_path}</span>
@@ -419,7 +445,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                   {lastIngestion.packets_processed} packets
                 </span>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-slate-400 font-mono tabular-nums">
+              <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-400 font-mono tabular-nums">
                 <span>Size: {formatBytes(lastIngestion.file_size_bytes)}</span>
                 <span aria-hidden="true">·</span>
                 <span>Payload: {formatBytes(lastIngestion.bytes_processed)}</span>
@@ -432,27 +458,29 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
       </div>
 
       {/* Decoded L2-L4 Packet Inspector */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">
-              Decoded L2–L4 Frame Inspector
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <span>Decoded L2–L4 Frame Inspector</span>
+              <HelpTooltip title="Packet Table Inspector" description="Displays individual decoded frames from live telemetry or uploaded PCAPs, including MAC/IP endpoints, VLAN tags, and TCP flags." />
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Showing {filteredPackets.length} frame(s) extracted by the Rust decoder
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg">
               {['ALL', 'TCP', 'UDP', 'ICMP', 'ARP', 'VLAN'].map((proto) => (
                 <button
                   key={proto}
+                  type="button"
                   onClick={() => setProtocolFilter(proto)}
                   className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                     protocolFilter === proto
-                      ? 'bg-slate-800 text-slate-100'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                   }`}
                 >
                   {proto === 'ALL' ? 'All' : proto}
@@ -460,23 +488,26 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
               ))}
             </div>
 
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter IP, MAC, port..."
-                className="pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
-              />
+            <div className="relative flex items-center gap-1">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter IP, MAC, port..."
+                  className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
+                />
+              </div>
+              <HelpTooltip title="Search Packets" description="Filter visible packets instantly by IP address, MAC address, port number, or protocol summary text." align="right" />
             </div>
           </div>
         </div>
 
         {filteredPackets.length === 0 ? (
-          <div className="py-12 text-center border border-dashed border-slate-800 rounded-lg space-y-2">
-            <Layers className="w-6 h-6 text-slate-500 mx-auto" />
-            <div className="text-xs font-medium text-slate-300">
+          <div className="py-12 text-center border border-dashed border-slate-300 dark:border-slate-800 rounded-lg space-y-2">
+            <Layers className="w-6 h-6 text-slate-400 dark:text-slate-500 mx-auto" />
+            <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
               No decoded frames to display
             </div>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
@@ -484,10 +515,10 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto border border-slate-800 rounded-lg">
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-lg">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/70 text-xs text-slate-400">
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 text-xs text-slate-500 dark:text-slate-400">
                   <th className="py-2.5 px-3 font-medium">Timestamp</th>
                   <th className="py-2.5 px-3 font-medium">Protocol</th>
                   <th className="py-2.5 px-3 font-medium">VLAN</th>
@@ -498,7 +529,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                   <th className="py-2.5 px-3 font-medium">L2–L4 Detail</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/70 text-xs font-mono tabular-nums">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70 text-xs font-mono tabular-nums">
                 {filteredPackets.map((pkt, idx) => {
                   const srcAddr = pkt.src_ip
                     ? pkt.src_port !== null
@@ -511,29 +542,29 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                       : pkt.dst_ip
                     : pkt.dst_mac;
                   return (
-                    <tr key={`${pkt.timestamp_us}-${idx}`} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2 px-3 text-slate-400 whitespace-nowrap">
+                    <tr key={`${pkt.timestamp_us}-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-2 px-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {formatTimestampUs(pkt.timestamp_us)}
                       </td>
-                      <td className="py-2 px-3 text-emerald-400 font-medium whitespace-nowrap">
+                      <td className="py-2 px-3 text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap">
                         {pkt.protocol}
                       </td>
-                      <td className="py-2 px-3 text-slate-300 whitespace-nowrap">
+                      <td className="py-2 px-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {pkt.vlan_id !== null ? pkt.vlan_id : '-'}
                       </td>
-                      <td className="py-2 px-3 text-slate-200 whitespace-nowrap" title={pkt.src_mac}>
+                      <td className="py-2 px-3 text-slate-900 dark:text-slate-200 whitespace-nowrap" title={pkt.src_mac}>
                         {srcAddr}
                       </td>
-                      <td className="py-2 px-3 text-slate-200 whitespace-nowrap" title={pkt.dst_mac}>
+                      <td className="py-2 px-3 text-slate-900 dark:text-slate-200 whitespace-nowrap" title={pkt.dst_mac}>
                         {dstAddr}
                       </td>
-                      <td className="py-2 px-3 text-sky-400 whitespace-nowrap">
+                      <td className="py-2 px-3 text-sky-600 dark:text-sky-400 whitespace-nowrap">
                         {pkt.tcp_flags || '-'}
                       </td>
-                      <td className="py-2 px-3 text-slate-300 text-right whitespace-nowrap">
+                      <td className="py-2 px-3 text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
                         {pkt.raw_len} B
                       </td>
-                      <td className="py-2 px-3 text-slate-400 font-sans max-w-xs truncate" title={pkt.info}>
+                      <td className="py-2 px-3 text-slate-600 dark:text-slate-400 font-sans max-w-xs truncate" title={pkt.info}>
                         {pkt.info}
                       </td>
                     </tr>

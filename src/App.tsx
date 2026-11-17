@@ -1,14 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { registerSW } from 'virtual:pwa-register';
 import { Header } from './components/Header';
 import { Navigation, TabId } from './components/Navigation';
+import { HamburgerMenu } from './components/HamburgerMenu';
 import { DashboardView } from './components/DashboardView';
 import { CaptureView } from './components/CaptureView';
 import { InterfacesView } from './components/InterfacesView';
 import { RbacView } from './components/RbacView';
 import { AuditView } from './components/AuditView';
 import { ValidationView } from './components/ValidationView';
+import { SystemSettingsView } from './components/SystemSettingsView';
 import { DocsView } from './components/DocsView';
 import { LoginModal } from './components/LoginModal';
+import { LegalOnboardingModal } from './components/LegalOnboardingModal';
+import { ContextualOnboarding } from './components/ContextualOnboarding';
+import { useTheme } from './hooks/useTheme';
 import { apiService } from './services/api';
 import { User, UserRole } from './types/auth';
 import {
@@ -17,10 +23,15 @@ import {
   StorageMetrics,
   AuditLogItem,
   EngineTelemetry,
+  SystemUpdateState,
 } from './types/system';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 
+const LEGAL_ACCEPTED_KEY = 'openndr_legal_accepted_v1';
+const GUIDE_VISIBLE_KEY = 'openndr_show_guide_v1';
+
 export default function App() {
+  const { theme, setTheme, toggleTheme } = useTheme();
   const [currentUser, setCurrentUser] = useState<User | null>(apiService.getCurrentUser());
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [services, setServices] = useState<SystemService[]>([]);
@@ -29,16 +40,78 @@ export default function App() {
   const [telemetry, setTelemetry] = useState<EngineTelemetry | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [updateState, setUpdateState] = useState<SystemUpdateState | null>(null);
+
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isForcingUpdate, setIsForcingUpdate] = useState(false);
+  const [isSavingUpdateConfig, setIsSavingUpdateConfig] = useState(false);
+
+  const [legalAccepted, setLegalAccepted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(LEGAL_ACCEPTED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(LEGAL_ACCEPTED_KEY) !== 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const [showGuide, setShowGuide] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(GUIDE_VISIBLE_KEY);
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const showToast = (type: 'success' | 'error', text: string) => {
+  const showToast = useCallback((type: 'success' | 'error', text: string) => {
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage(null), 4000);
-  };
+  }, []);
 
-  // Synchronise les données depuis l'API réelle
+  const handleSetShowGuide = useCallback((visible: boolean) => {
+    setShowGuide(visible);
+    try {
+      localStorage.setItem(GUIDE_VISIBLE_KEY, String(visible));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleAcceptLegal = useCallback(() => {
+    setLegalAccepted(true);
+    setIsLegalModalOpen(false);
+    try {
+      localStorage.setItem(LEGAL_ACCEPTED_KEY, 'true');
+    } catch {
+      // ignore
+    }
+    showToast('success', 'Legal notice acknowledged.');
+  }, [showToast]);
+
+  const refreshUpdateState = useCallback(async () => {
+    try {
+      const state = await apiService.getUpdateStatus();
+      setUpdateState(state);
+    } catch {
+      // ignore temporary update fetch errors
+    }
+  }, []);
+
+  // Synchronizes real telemetry & RBAC data from /api/v1
   const refreshData = useCallback(async () => {
+    await refreshUpdateState();
+
     if (!apiService.isAuthenticated()) {
       setServices([]);
       setInterfaces([]);
@@ -56,28 +129,28 @@ export default function App() {
         setTelemetry(statusData.engine);
       }
     } catch {
-      // Ignorer si le backend n'a pas encore répondu
+      // Ignore if backend is momentarily unavailable
     }
 
     try {
       const telem = await apiService.getCaptureTelemetry();
       setTelemetry(telem);
     } catch {
-      // Ignorer si non disponible
+      // Ignore if unavailable
     }
 
     try {
       const ifaces = await apiService.getInterfaces();
       setInterfaces(ifaces);
     } catch {
-      // Ignorer si non disponible
+      // Ignore if unavailable
     }
 
     try {
       const stor = await apiService.getStorageMetrics();
       setStorage(stor);
     } catch {
-      // Ignorer si non disponible
+      // Ignore if unavailable
     }
 
     if (apiService.hasPermission('users:view')) {
@@ -101,10 +174,9 @@ export default function App() {
     } else {
       setAuditLogs([]);
     }
-  }, []);
+  }, [refreshUpdateState]);
 
   useEffect(() => {
-    // S'abonne aux changements d'authentification
     const unsubscribe = apiService.onAuthStateChange((user) => {
       setCurrentUser(user);
       refreshData();
@@ -117,6 +189,43 @@ export default function App() {
       clearInterval(interval);
     };
   }, [refreshData]);
+
+  // Register PWA Service Worker with automatic background updates
+  useEffect(() => {
+    let swTimer: ReturnType<typeof setInterval> | null = null;
+    try {
+      registerSW({
+        immediate: true,
+        onRegisteredSW(_swUrl, registration) {
+          if (registration) {
+            swTimer = setInterval(() => {
+              registration.update().catch(() => {
+                // ignore offline SW update checks
+              });
+            }, 15 * 60 * 1000);
+          }
+        },
+        onOfflineReady() {
+          // Shell cached cleanly
+        },
+      });
+    } catch {
+      // Ignore SW registration in unsupported contexts
+    }
+    return () => {
+      if (swTimer) clearInterval(swTimer);
+    };
+  }, []);
+
+  // Client-side background sync for auto-update checks
+  useEffect(() => {
+    if (!updateState?.auto_update_enabled) return;
+    const ms = Math.max(1, updateState.check_interval_minutes) * 60 * 1000;
+    const timer = setInterval(() => {
+      refreshUpdateState();
+    }, ms);
+    return () => clearInterval(timer);
+  }, [updateState?.auto_update_enabled, updateState?.check_interval_minutes, refreshUpdateState]);
 
   const handleLogin = async (email: string, pass: string) => {
     try {
@@ -173,24 +282,66 @@ export default function App() {
     }
   };
 
+  const handleCheckForUpdates = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const res = await apiService.checkForUpdates();
+      setUpdateState(res.update_state);
+      showToast('success', res.message);
+      await refreshData();
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to check for updates');
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleForceUpdate = async () => {
+    setIsForcingUpdate(true);
+    try {
+      const res = await apiService.forceSystemUpdate();
+      setUpdateState(res.update_state);
+      showToast('success', res.message);
+      await refreshData();
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Force update failed');
+    } finally {
+      setIsForcingUpdate(false);
+    }
+  };
+
+  const handleUpdateAutoConfig = async (enabled: boolean, intervalMinutes: number) => {
+    setIsSavingUpdateConfig(true);
+    try {
+      const res = await apiService.updateAutoUpdateConfig(enabled, intervalMinutes);
+      setUpdateState(res.update_state);
+      showToast('success', res.message);
+      await refreshData();
+    } catch (err: unknown) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to save auto-update settings');
+    } finally {
+      setIsSavingUpdateConfig(false);
+    }
+  };
+
   const hasViolation = interfaces.some((i) => i.role === 'CAPTURE_PASSIVE' && !i.isStealthCompliant);
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       {/* Toast notifications */}
       {toastMessage && (
         <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
           <div
             className={`px-4 py-3 rounded-lg border text-xs shadow-xl flex items-center gap-2.5 max-w-md ${
               toastMessage.type === 'success'
-                ? 'bg-slate-900 border-emerald-500/50 text-emerald-300'
-                : 'bg-slate-900 border-rose-500/50 text-rose-300'
+                ? 'bg-white dark:bg-slate-900 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                : 'bg-white dark:bg-slate-900 border-rose-500/50 text-rose-700 dark:text-rose-300'
             }`}
           >
             {toastMessage.type === 'success' ? (
-              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
             ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
             )}
             <span>{toastMessage.text}</span>
           </div>
@@ -202,6 +353,35 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenMenu={() => setIsMenuOpen(true)}
+        onOpenSettings={() => {
+          setActiveTab('settings');
+          refreshUpdateState();
+        }}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        showGuide={showGuide}
+        onToggleGuide={() => handleSetShowGuide(!showGuide)}
+        updateAvailable={updateState?.update_available}
+        onNotify={showToast}
+      />
+
+      {/* Categorized Hamburger Menu Drawer */}
+      <HamburgerMenu
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          refreshData();
+        }}
+        hasViolation={hasViolation}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        showGuide={showGuide}
+        onToggleGuide={() => handleSetShowGuide(!showGuide)}
+        onOpenLegal={() => setIsLegalModalOpen(true)}
+        onNotify={showToast}
       />
 
       {/* Module Navigation */}
@@ -212,10 +392,19 @@ export default function App() {
           refreshData();
         }}
         hasViolation={hasViolation}
+        updateAvailable={updateState?.update_available}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <ContextualOnboarding
+          activeTab={activeTab}
+          isVisible={showGuide}
+          isAuthenticated={Boolean(currentUser)}
+          onDismiss={() => handleSetShowGuide(false)}
+          onOpenLogin={() => setIsLoginOpen(true)}
+        />
+
         {activeTab === 'dashboard' && (
           <DashboardView
             services={services}
@@ -258,24 +447,58 @@ export default function App() {
 
         {activeTab === 'validation' && <ValidationView />}
 
+        {activeTab === 'settings' && (
+          <SystemSettingsView
+            updateState={updateState}
+            isCheckingUpdate={isCheckingUpdate}
+            isForcingUpdate={isForcingUpdate}
+            isSavingConfig={isSavingUpdateConfig}
+            onCheckForUpdates={handleCheckForUpdates}
+            onForceUpdate={handleForceUpdate}
+            onUpdateAutoConfig={handleUpdateAutoConfig}
+            theme={theme}
+            onSetTheme={setTheme}
+            showGuide={showGuide}
+            onSetShowGuide={handleSetShowGuide}
+            onOpenLegalModal={() => setIsLegalModalOpen(true)}
+            onNotify={showToast}
+          />
+        )}
+
         {activeTab === 'docs' && <DocsView />}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-950 py-4 text-xs text-slate-500">
+      <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950 py-4 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div>
-            OpenNDR v0.2.0 · Autonomous Network Engine licensed under AGPL-3.0
+          <div className="flex flex-wrap items-center gap-2">
+            <span>OpenNDR v0.2.0 · Autonomous Network Engine licensed under AGPL-3.0</span>
+            <span>·</span>
+            <button
+              type="button"
+              onClick={() => setIsLegalModalOpen(true)}
+              className="underline hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
+            >
+              Legal Notice &amp; Data Disclaimer
+            </button>
           </div>
-          <div className="flex items-center gap-4 text-slate-400">
+          <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400">
             <span>Debian 13 (Trixie)</span>
             <span>·</span>
-            <span>PostgreSQL & Alembic</span>
+            <span>PostgreSQL &amp; Alembic</span>
             <span>·</span>
             <span>Argon2id RBAC</span>
           </div>
         </div>
       </footer>
+
+      {/* Legal Onboarding & Liability Disclaimer Modal */}
+      <LegalOnboardingModal
+        isOpen={isLegalModalOpen}
+        alreadyAccepted={legalAccepted}
+        onAccept={handleAcceptLegal}
+        onClose={() => setIsLegalModalOpen(false)}
+      />
 
       {/* Authentication Modal */}
       <LoginModal

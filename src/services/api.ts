@@ -13,6 +13,7 @@ import {
   AuditLogItem,
   EngineTelemetry,
   PcapIngestionResult,
+  SystemUpdateState,
 } from '../types/system';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -596,6 +597,39 @@ class ApiService {
       body: JSON.stringify({
         filename,
         content_base64: contentBase64,
+      }),
+    });
+  }
+
+  // ==========================================
+  // System Settings & Background Auto-Updater
+  // ==========================================
+
+  public async getUpdateStatus(): Promise<SystemUpdateState> {
+    return await this.request<SystemUpdateState>('/system/updates');
+  }
+
+  public async checkForUpdates(): Promise<{ message: string; update_state: SystemUpdateState }> {
+    return await this.request<{ message: string; update_state: SystemUpdateState }>('/system/updates/check', {
+      method: 'POST',
+    });
+  }
+
+  public async forceSystemUpdate(): Promise<{ message: string; update_state: SystemUpdateState }> {
+    return await this.request<{ message: string; update_state: SystemUpdateState }>('/system/updates/force', {
+      method: 'POST',
+    });
+  }
+
+  public async updateAutoUpdateConfig(
+    autoUpdateEnabled: boolean,
+    checkIntervalMinutes: number
+  ): Promise<{ message: string; update_state: SystemUpdateState }> {
+    return await this.request<{ message: string; update_state: SystemUpdateState }>('/system/updates/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        auto_update_enabled: autoUpdateEnabled,
+        check_interval_minutes: checkIntervalMinutes,
       }),
     });
   }

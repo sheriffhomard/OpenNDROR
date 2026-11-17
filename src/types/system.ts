@@ -112,3 +112,32 @@ export interface PcapIngestionResult {
   last_packet_timestamp?: number | null;
   packet_summaries: PacketSummary[];
 }
+
+export interface SystemUpdateEvent {
+  id: string;
+  timestamp: string;
+  trigger: 'MANUAL_CHECK' | 'FORCE_UPDATE' | 'BACKGROUND_AUTO';
+  from_version: string;
+  to_version: string;
+  status: 'SUCCESS' | 'UP_TO_DATE' | 'FAILED';
+  details: string;
+}
+
+export interface SystemUpdateState {
+  current_version: string;
+  available_version: string;
+  release_date: string;
+  last_checked_at: string;
+  last_updated_at: string;
+  next_scheduled_check_at: string | null;
+  auto_update_enabled: boolean;
+  check_interval_minutes: number;
+  background_worker_active: boolean;
+  update_available: boolean;
+  build_revision: number;
+  channel: string;
+  status: 'UP_TO_DATE' | 'UPDATE_AVAILABLE' | 'INSTALLING' | 'UPDATED';
+  release_notes: string;
+  engine_integrity_ok: boolean;
+  history: SystemUpdateEvent[];
+}

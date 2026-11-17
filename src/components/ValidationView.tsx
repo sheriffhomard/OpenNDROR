@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ValidationTestItem } from '../types/system';
 import { apiService } from '../services/api';
+import { HelpTooltip } from './HelpTooltip';
 
 export const ValidationView: React.FC = () => {
   const [tests, setTests] = useState<ValidationTestItem[]>([
@@ -93,7 +94,6 @@ export const ValidationView: React.FC = () => {
       `--- Starting test campaign at ${new Date().toLocaleTimeString('en-US')} ---`,
     ]);
 
-    // Test 1: Liveness Probe
     updateTest('probe-live', { status: 'running' });
     const t0 = performance.now();
     try {
@@ -112,15 +112,10 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t0);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-live', {
-        status: 'failed',
-        durationMs: dur,
-        details: `Failed: ${msg}`,
-      });
+      updateTest('probe-live', { status: 'failed', durationMs: dur, details: `Failed: ${msg}` });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Liveness Probe: ${msg}`]);
     }
 
-    // Test 2: Readiness Probe
     updateTest('probe-ready', { status: 'running' });
     const t1 = performance.now();
     try {
@@ -139,15 +134,10 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t1);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-ready', {
-        status: 'failed',
-        durationMs: dur,
-        details: `Failed: ${msg}`,
-      });
+      updateTest('probe-ready', { status: 'failed', durationMs: dur, details: `Failed: ${msg}` });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Readiness Probe: ${msg}`]);
     }
 
-    // Test 3: Health Status
     updateTest('probe-health', { status: 'running' });
     const t2 = performance.now();
     try {
@@ -165,21 +155,14 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t2);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-health', {
-        status: 'failed',
-        durationMs: dur,
-        details: `Failed: ${msg}`,
-      });
+      updateTest('probe-health', { status: 'failed', durationMs: dur, details: `Failed: ${msg}` });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Global Report: ${msg}`]);
     }
 
-    // Test 4: Unauthenticated 401 Rejection
     updateTest('probe-auth-guard', { status: 'running' });
     const t3 = performance.now();
     try {
-      const rawRes = await fetch('/api/v1/users', {
-        headers: { Accept: 'application/json' },
-      });
+      const rawRes = await fetch('/api/v1/users', { headers: { Accept: 'application/json' } });
       const dur = Math.round(performance.now() - t3);
       if (rawRes.status === 401) {
         updateTest('probe-auth-guard', {
@@ -194,15 +177,10 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t3);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-auth-guard', {
-        status: 'failed',
-        durationMs: dur,
-        details: msg,
-      });
+      updateTest('probe-auth-guard', { status: 'failed', durationMs: dur, details: msg });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Security 401: ${msg}`]);
     }
 
-    // Test 5: Invalid Credentials Rejection
     updateTest('probe-invalid-creds', { status: 'running' });
     const t4 = performance.now();
     try {
@@ -228,15 +206,10 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t4);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-invalid-creds', {
-        status: 'failed',
-        durationMs: dur,
-        details: msg,
-      });
+      updateTest('probe-invalid-creds', { status: 'failed', durationMs: dur, details: msg });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Invalid credentials: ${msg}`]);
     }
 
-    // Test 6: Real Network Isolation Compliance
     updateTest('probe-stealth-check', { status: 'running' });
     const t5 = performance.now();
     try {
@@ -266,15 +239,10 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t5);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-stealth-check', {
-        status: 'failed',
-        durationMs: dur,
-        details: msg,
-      });
+      updateTest('probe-stealth-check', { status: 'failed', durationMs: dur, details: msg });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Stealth Isolation: ${msg}`]);
     }
 
-    // Test 7: V0.2 Capture Engine (Real Telemetry)
     updateTest('probe-engine-standby', { status: 'running' });
     const t6 = performance.now();
     try {
@@ -296,15 +264,10 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t6);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-engine-standby', {
-        status: 'failed',
-        durationMs: dur,
-        details: msg,
-      });
+      updateTest('probe-engine-standby', { status: 'failed', durationMs: dur, details: msg });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Rust Engine V0.2: ${msg}`]);
     }
 
-    // Test 8: Storage Quota
     updateTest('probe-storage-quota', { status: 'running' });
     const t7 = performance.now();
     try {
@@ -322,11 +285,7 @@ export const ValidationView: React.FC = () => {
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t7);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-storage-quota', {
-        status: 'failed',
-        durationMs: dur,
-        details: msg,
-      });
+      updateTest('probe-storage-quota', { status: 'failed', durationMs: dur, details: msg });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Storage: ${msg}`]);
     }
 
@@ -351,23 +310,25 @@ export const ValidationView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100">
-              V0.2 Automated Acceptance & Validation Suite
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <span>V0.2 Automated Acceptance &amp; Validation Suite</span>
+              <HelpTooltip title="Live Validation Suite" description="Runs 8 real HTTP checks against the API to confirm security barriers, database connectivity, and engine telemetry." />
             </h2>
-            <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
               Executes live HTTP probes against the backend to verify strict acceptance criteria
               (authentication, PostgreSQL database, network isolation, RBAC, V0.2 capture engine).
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
+              type="button"
               onClick={handleRunAll}
               disabled={isRunning}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap shrink-0"
             >
               {isRunning ? (
                 <>
@@ -385,18 +346,21 @@ export const ValidationView: React.FC = () => {
         </div>
 
         {/* Scorebar */}
-        <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
           <div className="flex items-center gap-4">
-            <span className="text-slate-400">
-              Result: <strong className="text-slate-200">{passedCount}</strong> / {tests.length} tests passed
+            <span className="text-slate-600 dark:text-slate-400 inline-flex items-center gap-1.5">
+              <span>
+                Result: <strong className="text-slate-900 dark:text-slate-200">{passedCount}</strong> / {tests.length} tests passed
+              </span>
+              <HelpTooltip title="Acceptance Score" description="Counts how many live HTTP probes succeeded during the latest run." />
             </span>
             {failedCount > 0 && (
-              <span className="text-rose-400 font-semibold">
+              <span className="text-rose-600 dark:text-rose-400 font-semibold">
                 {failedCount} failed
               </span>
             )}
           </div>
-          <div className="w-48 bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div className="w-48 bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
             <div
               className={`h-full transition-all duration-300 ${
                 failedCount > 0 ? 'bg-amber-500' : 'bg-emerald-500'
@@ -414,46 +378,46 @@ export const ValidationView: React.FC = () => {
           return (
             <div
               key={test.id}
-              className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2">
                     <Icon className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span className="text-xs font-semibold text-slate-200">{test.name}</span>
+                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-200">{test.name}</span>
                   </div>
                   <div>
                     {test.status === 'passed' && (
-                      <span className="flex items-center gap-1 text-emerald-400 text-xs font-mono">
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-mono">
                         <CheckCircle2 className="w-4 h-4" />
                         PASS
                       </span>
                     )}
                     {test.status === 'failed' && (
-                      <span className="flex items-center gap-1 text-rose-400 text-xs font-mono">
+                      <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400 text-xs font-mono">
                         <XCircle className="w-4 h-4" />
                         FAIL
                       </span>
                     )}
                     {test.status === 'running' && (
-                      <span className="flex items-center gap-1 text-amber-400 text-xs font-mono">
+                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-mono">
                         <RotateCcw className="w-3.5 h-3.5 animate-spin" />
                         TESTING...
                       </span>
                     )}
                     {test.status === 'pending' && (
-                      <span className="text-slate-500 text-xs font-mono">PENDING</span>
+                      <span className="text-slate-400 dark:text-slate-500 text-xs font-mono">PENDING</span>
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-slate-400">{test.description}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400">{test.description}</p>
               </div>
 
               {test.details && (
-                <div className="mt-3 pt-2 border-t border-slate-800/80 text-xs font-mono text-slate-300 flex justify-between items-center">
+                <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800/80 text-xs font-mono text-slate-700 dark:text-slate-300 flex justify-between items-center">
                   <span className="truncate">{test.details}</span>
                   {test.durationMs !== undefined && (
-                    <span className="text-slate-500 text-xs shrink-0 ml-2">
+                    <span className="text-slate-500 text-xs shrink-0 ml-2 tabular-nums">
                       {test.durationMs}ms
                     </span>
                   )}
@@ -465,21 +429,22 @@ export const ValidationView: React.FC = () => {
       </div>
 
       {/* Live Terminal Log */}
-      <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-          <Terminal className="w-4 h-4 text-emerald-400" />
+      <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-900 dark:text-slate-300">
+          <Terminal className="w-4 h-4 text-emerald-500" />
           <span>HTTP Probe Execution Log</span>
+          <HelpTooltip title="Probe Execution Output" description="Raw chronological output and response latency for each HTTP diagnostic check." />
         </div>
-        <div className="p-3 bg-slate-900 rounded font-mono text-xs text-slate-300 space-y-1 max-h-48 overflow-y-auto">
+        <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-700 dark:text-slate-300 space-y-1 max-h-48 overflow-y-auto">
           {consoleLogs.map((log, idx) => (
             <div
               key={idx}
               className={
                 log.includes('[✓ PASS]')
-                  ? 'text-emerald-400'
+                  ? 'text-emerald-700 dark:text-emerald-400'
                   : log.includes('[✗ FAIL]')
-                  ? 'text-rose-400'
-                  : 'text-slate-400'
+                  ? 'text-rose-700 dark:text-rose-400'
+                  : 'text-slate-500 dark:text-slate-400'
               }
             >
               {log}

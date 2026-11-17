@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# OpenNDR V0.1 — Installateur Complet, Robuste et Idempotent pour Debian 13 (Trixie)
+# OpenNDR V0.2 — Installateur Complet, Robuste et Idempotent pour Debian 13 (Trixie)
 # Dépôt officiel : https://github.com/sheriffhomard/OpenNDROR
 # ==============================================================================
 set -Eeuo pipefail
@@ -28,7 +28,7 @@ OPENNDR_LOG_DIR="/var/log/openndr"
 OPENNDR_RUN_DIR="/run/openndr"
 
 echo "======================================================================"
-echo "      Installation Complète de la Plateforme OpenNDR V0.1"
+echo "      Installation Complète de la Plateforme OpenNDR V0.2"
 echo "           Système Cible : Debian 13 (Trixie) GNU/Linux"
 echo "======================================================================"
 
@@ -81,6 +81,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
     build-essential \
+    libpcap-dev \
     python3 \
     python3-venv \
     python3-pip \

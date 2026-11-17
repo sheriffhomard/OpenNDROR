@@ -58,3 +58,57 @@ export interface ValidationTestItem {
   details?: string;
   durationMs?: number;
 }
+
+export interface ProtocolStats {
+  tcp_packets: number;
+  udp_packets: number;
+  icmp_packets: number;
+  arp_packets: number;
+  ipv4_packets: number;
+  ipv6_packets: number;
+  vlan_packets: number;
+  other_packets: number;
+}
+
+export interface PacketSummary {
+  timestamp_us: number;
+  raw_len: number;
+  protocol: string;
+  vlan_id: number | null;
+  src_mac: string;
+  dst_mac: string;
+  src_ip: string | null;
+  dst_ip: string | null;
+  src_port: number | null;
+  dst_port: number | null;
+  tcp_flags: string | null;
+  info: string;
+}
+
+export interface EngineTelemetry {
+  engine_version: string;
+  is_running: boolean;
+  capture_mode: string;
+  active_interface: string | null;
+  packets_received: number;
+  packets_dropped: number;
+  bytes_processed: number;
+  current_mbps: number;
+  ring_buffer_usage_pct: number;
+  protocol_stats: ProtocolStats;
+  last_capture_file: string | null;
+  recent_packets?: PacketSummary[];
+  socket_error?: string;
+}
+
+export interface PcapIngestionResult {
+  file_path: string;
+  file_size_bytes: number;
+  packets_processed: number;
+  bytes_processed: number;
+  duration_seconds: number;
+  protocol_stats: ProtocolStats;
+  first_packet_timestamp?: number | null;
+  last_packet_timestamp?: number | null;
+  packet_summaries: PacketSummary[];
+}

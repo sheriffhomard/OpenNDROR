@@ -1,5 +1,5 @@
 /**
- * OpenNDR V0.1 — Couche Client API HTTP Réelle
+ * OpenNDR V0.2 — Couche Client API HTTP Réelle
  *
  * Communication HTTP directe avec le backend FastAPI (/api/v1).
  * Aucune donnée simulée, aucun compte de démonstration en dur,
@@ -11,6 +11,8 @@ import {
   NetworkInterfaceConfig,
   StorageMetrics,
   AuditLogItem,
+  EngineTelemetry,
+  PcapIngestionResult,
 } from '../types/system';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -407,7 +409,8 @@ class ApiService {
   // ==========================================
 
   public async getSystemStatus(): Promise<{
-    platform: { version: string; target_os: string; environment: string };
+    platform: { version: string; target_os: string; environment: string; engine_state?: string };
+    engine?: EngineTelemetry;
     services: SystemService[];
     interfaces: {
       admin: { name: string; role: string; status: string };
@@ -416,6 +419,7 @@ class ApiService {
         role: string;
         isolation: string;
         capture_engine_active: boolean;
+        capture_mode?: string;
         notice: string;
       };
     };
@@ -454,7 +458,7 @@ class ApiService {
       isUp: item.is_up,
       mtu: item.mtu,
       speedMbps: item.speed_mbps,
-      rxPackets: 0, // V0.1 limitation : 0 paquets capturés
+      rxPackets: 0, // Compteurs paquets détaillés exposés par /system/capture/telemetry (V0.2)
       txPackets: 0,
       rxBytes: 0,
       txBytes: 0,
@@ -538,8 +542,17 @@ class ApiService {
     status: string;
     version: string;
     target_platform: string;
-    database: { connected: boolean; status: string };
-    capture_engine: { socket_ready: boolean; status: string };
+    database: { connected?: boolean; status: string };
+    capture_engine: {
+      version?: string;
+      mode?: string;
+      socket_ready?: boolean;
+      socket_present?: boolean;
+      capture_active?: boolean;
+      packets_received?: number;
+      status?: string;
+      notice?: string;
+    };
     timestamp: string;
   }> {
     return await this.request('/health');
@@ -556,6 +569,35 @@ class ApiService {
 
   public async getLiveness(): Promise<{ status: string; timestamp: string }> {
     return await this.request('/health/live');
+  }
+
+  public async getCaptureTelemetry(): Promise<EngineTelemetry> {
+    return await this.request<EngineTelemetry>('/system/capture/telemetry');
+  }
+
+  public async startCapture(): Promise<{ status: string; message?: string; capture_mode?: string }> {
+    return await this.request('/system/capture/start', { method: 'POST' });
+  }
+
+  public async stopCapture(): Promise<{ status: string; message?: string; capture_mode?: string }> {
+    return await this.request('/system/capture/stop', { method: 'POST' });
+  }
+
+  public async ingestPcap(filepath: string): Promise<PcapIngestionResult> {
+    return await this.request<PcapIngestionResult>('/system/capture/ingest-pcap', {
+      method: 'POST',
+      body: JSON.stringify({ filepath }),
+    });
+  }
+
+  public async uploadPcap(filename: string, contentBase64: string): Promise<PcapIngestionResult> {
+    return await this.request<PcapIngestionResult>('/system/capture/upload-pcap', {
+      method: 'POST',
+      body: JSON.stringify({
+        filename,
+        content_base64: contentBase64,
+      }),
+    });
   }
 }
 

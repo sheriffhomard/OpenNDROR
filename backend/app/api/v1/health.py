@@ -1,5 +1,5 @@
 """
-Sondes de Santé et Disponibilité OpenNDR V0.1
+Sondes de Santé et Disponibilité OpenNDR V0.2
 Distinction stricte entre Liveness (vie du processus) et Readiness (disponibilité dépendances).
 """
 import os
@@ -9,6 +9,7 @@ from fastapi import APIRouter, Response, status
 from app.core.config import settings
 from app.core.database import check_database_connection
 from app.schemas.system import HealthCheckOut, LivenessOut, ReadinessOut
+from app.services.system_service import SystemService
 
 router = APIRouter()
 
@@ -52,10 +53,12 @@ def readiness(response: Response):
 def health_detailed(response: Response):
     """
     Rapport d'état détaillé des composants.
-    Vérification réelle de PostgreSQL et du socket du moteur Rust.
+    Vérification réelle de PostgreSQL et du socket IPC du moteur Rust V0.2.
     """
     db_connected, db_msg = check_database_connection()
     engine_socket_exists = os.path.exists(settings.ENGINE_SOCKET_PATH)
+    engine_info = SystemService.send_engine_ipc_command("GET_STATUS")
+    is_running = bool(engine_info.get("is_running", False))
 
     overall_status = "HEALTHY" if db_connected else "DEGRADED"
     if not db_connected:
@@ -71,12 +74,18 @@ def health_detailed(response: Response):
             "target": settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "local_sqlite",
         },
         "capture_engine": {
-            "version": "0.1.0",
-            "mode": "STANDBY_READY",
+            "version": engine_info.get("engine_version", settings.VERSION),
+            "mode": engine_info.get("capture_mode", "STANDBY"),
             "ipc_socket": settings.ENGINE_SOCKET_PATH,
             "socket_present": engine_socket_exists,
-            "capture_active": False,
-            "notice": "Le décodage et la capture passive active débutent en V0.2.",
+            "capture_active": is_running,
+            "active_interface": engine_info.get("active_interface"),
+            "packets_received": engine_info.get("packets_received", 0),
+            "notice": (
+                "Moteur V0.2 actif (AF_PACKET / PACKET_MMAP & décodage L2-L4)."
+                if is_running
+                else "Moteur V0.2 en veille (prêt pour capture AF_PACKET et ingestion PCAP/PCAPNG)."
+            ),
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

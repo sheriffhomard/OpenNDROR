@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-console.log('[*] Vérification de l\'intégrité du Frontend OpenNDR V0.1...');
+console.log('[*] Vérification de l\'intégrité du Frontend OpenNDR V0.2...');
 
 // 1. Contrôle d'absence de données simulées
 const forbiddenPatterns = [
@@ -62,6 +62,11 @@ const requiredMethods = [
   'getLiveness',
   'getReadiness',
   'getHealth',
+  'getCaptureTelemetry',
+  'startCapture',
+  'stopCapture',
+  'ingestPcap',
+  'uploadPcap',
 ];
 
 for (const method of requiredMethods) {

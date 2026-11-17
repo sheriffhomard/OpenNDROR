@@ -37,7 +37,7 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded">
-              Debian 13 · AF_PACKET Standby (V0.1)
+              Debian 13 · AF_PACKET / PACKET_MMAP (V0.2)
             </span>
           </div>
         </div>
@@ -169,9 +169,9 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
                 <div className="text-emerald-400">ip link set {current.name} promisc on arp off up</div>
               </div>
               <div className="p-3 bg-slate-900 border border-slate-800 rounded text-xs text-slate-400 flex items-start gap-2">
-                <Radio className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <Radio className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Note V0.1 :</strong> En version V0.1, le moteur Rust reste en mode standby sans socket actif de capture paquet. Le décodage et l'analyse de flux AF_PACKET seront intégrés dans la V0.2.
+                  <strong>Moteur V0.2 :</strong> La capture passive zéro-émission s’effectue via socket AF_PACKET (anneau mmap TPACKET_V2) et le décodeur hiérarchique L2–L4, avec rotation automatique des traces sous /var/lib/openndr/captures/.
                 </span>
               </div>
             </div>

@@ -38,7 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-2">
               <span className="font-semibold text-base text-slate-100 tracking-tight">OpenNDR</span>
               <span className="text-xs text-slate-500">·</span>
-              <span className="text-xs text-slate-400 font-mono">v0.1.0</span>
+              <span className="text-xs text-slate-400 font-mono">v0.2.0</span>
             </div>
             <div className="text-xs text-slate-400">
               Sonde NDR souveraine · Debian 13 (Trixie)

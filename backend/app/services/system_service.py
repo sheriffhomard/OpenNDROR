@@ -505,3 +505,155 @@ class SystemService:
             "retentionDays": settings.PCAP_RETENTION_DAYS,
             "pcapFilesCount": pcap_file_count,
         }
+
+    @classmethod
+    def send_engine_ipc_command(cls, command: str) -> Dict[str, Any]:
+        """
+        Envoie une commande au moteur Rust OpenNDR via le socket IPC UNIX.
+        """
+        import json
+
+        socket_path = settings.ENGINE_SOCKET_PATH
+        if not os.path.exists(socket_path):
+            return {
+                "engine_version": "0.2.0",
+                "is_running": False,
+                "capture_mode": "STANDBY",
+                "active_interface": None,
+                "packets_received": 0,
+                "packets_dropped": 0,
+                "bytes_processed": 0,
+                "current_mbps": 0.0,
+                "ring_buffer_usage_pct": 0.0,
+                "protocol_stats": {
+                    "tcp_packets": 0,
+                    "udp_packets": 0,
+                    "icmp_packets": 0,
+                    "arp_packets": 0,
+                    "ipv4_packets": 0,
+                    "ipv6_packets": 0,
+                    "vlan_packets": 0,
+                    "other_packets": 0,
+                },
+                "last_capture_file": None,
+                "recent_packets": [],
+                "socket_error": f"Socket IPC {socket_path} non disponible (moteur arrêté)",
+            }
+
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(5.0)
+                client.connect(socket_path)
+                client.sendall(command.encode("utf-8"))
+                response_data = b""
+                while True:
+                    chunk = client.recv(65536)
+                    if not chunk:
+                        break
+                    response_data += chunk
+                return json.loads(response_data.decode("utf-8"))
+        except Exception as e:
+            return {
+                "engine_version": "0.2.0",
+                "is_running": False,
+                "capture_mode": "STANDBY",
+                "recent_packets": [],
+                "error": str(e),
+            }
+
+    @classmethod
+    def _find_engine_binary(cls) -> Optional[str]:
+        bin_paths = [
+            "/usr/local/bin/openndr-engine",
+            "/usr/bin/openndr-engine",
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../engine/target/release/openndr-engine")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../engine/target/debug/openndr-engine")),
+        ]
+        for b in bin_paths:
+            if os.path.isfile(b) and os.access(b, os.X_OK):
+                return b
+        return None
+
+    @classmethod
+    def ingest_pcap_file(cls, filepath: str) -> Dict[str, Any]:
+        """
+        Ingère et décode une trace PCAP ou PCAPNG via le démon IPC (si actif) ou le binaire openndr-engine.
+        """
+        import json
+
+        if not filepath or not isinstance(filepath, str):
+            raise ValueError("Chemin de fichier PCAP invalide.")
+
+        norm_path = os.path.normpath(filepath.strip())
+        if ".." in norm_path.split(os.sep):
+            raise ValueError("Traversée de répertoire interdite dans le chemin PCAP.")
+
+        real_path = os.path.realpath(norm_path)
+        if not os.path.isfile(real_path):
+            raise FileNotFoundError(f"Fichier de trace introuvable : {filepath}")
+
+        ext = os.path.splitext(real_path)[1].lower()
+        if ext not in {".pcap", ".pcapng", ".cap"}:
+            raise ValueError("Extension non supportée (attendu .pcap, .pcapng ou .cap).")
+
+        # Préférer l'IPC du démon actif afin de mettre à jour la télémétrie en mémoire
+        if os.path.exists(settings.ENGINE_SOCKET_PATH):
+            ipc_res = cls.send_engine_ipc_command(f"INGEST_PCAP {real_path}")
+            if isinstance(ipc_res, dict) and "packets_processed" in ipc_res:
+                return ipc_res
+
+        chosen_bin = cls._find_engine_binary()
+        if not chosen_bin:
+            raise RuntimeError("Binaire openndr-engine introuvable pour l'analyse PCAP")
+
+        proc = subprocess.run(
+            [chosen_bin, "--ingest", real_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+            shell=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"Erreur openndr-engine lors de l'ingestion : {proc.stderr}")
+
+        raw_stdout = proc.stdout.strip()
+        json_start = raw_stdout.find("{")
+        if json_start != -1:
+            json_str = raw_stdout[json_start:]
+            return json.loads(json_str)
+        raise RuntimeError(f"Sortie inattendue du moteur : {raw_stdout}")
+
+    @classmethod
+    def ingest_pcap_bytes(cls, filename: str, raw_bytes: bytes) -> Dict[str, Any]:
+        """
+        Ingère une trace PCAP/PCAPNG transmise par le navigateur via un fichier temporaire sécurisé.
+        """
+        import tempfile
+
+        if not raw_bytes:
+            raise ValueError("Fichier PCAP vide.")
+        if len(raw_bytes) > 64 * 1024 * 1024:
+            raise ValueError("Taille maximale de trace dépassée (64 Mo max).")
+
+        safe_name = os.path.basename(filename or "upload.pcap")
+        ext = os.path.splitext(safe_name)[1].lower()
+        if ext not in {".pcap", ".pcapng", ".cap"}:
+            raise ValueError("Format invalide : seuls les fichiers .pcap, .pcapng et .cap sont acceptés.")
+
+        tmp_path: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(prefix="openndr_upload_", suffix=ext, delete=False) as tmp:
+                tmp.write(raw_bytes)
+                tmp_path = tmp.name
+
+            result = cls.ingest_pcap_file(tmp_path)
+            result["file_path"] = safe_name
+            return result
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+

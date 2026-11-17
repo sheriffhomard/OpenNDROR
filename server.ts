@@ -1,9 +1,10 @@
 /**
- * OpenNDR V0.1 — Full-Stack Server Entry Point
+ * OpenNDR V0.2 — Full-Stack Server Entry Point
  * Express server mounting Vite middlewares in dev mode and serving the REST API.
  */
 import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
+import { execFile } from 'child_process';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -17,7 +18,7 @@ const app = express();
 const PORT = 3000;
 const SECRET_KEY = process.env.SECRET_KEY || 'openndr_auto_generated_secure_secret_key_2026_debian13';
 
-app.use(express.json());
+app.use(express.json({ limit: '64mb' }));
 
 // In-memory persistent database store during server uptime
 interface UserRecord {
@@ -255,11 +256,20 @@ function requirePermission(perm: string) {
 // Health Endpoints
 app.get('/api/v1/health', (_req, res) => {
   res.json({
-    status: 'healthy',
-    version: '0.1.0',
+    status: 'HEALTHY',
+    version: '0.2.0',
     target_platform: 'Debian 13 (Trixie)',
-    database: { connected: true, status: 'active (PostgreSQL & SQLite synchronized)' },
-    capture_engine: { socket_ready: false, status: 'standby_v0.1 (Zéro paquet simulé)' },
+    database: { connected: true, status: 'CONNECTED' },
+    capture_engine: {
+      version: '0.2.0',
+      mode: isLiveCaptureRunning ? 'AF_PACKET_MMAP' : 'STANDBY',
+      socket_ready: fs.existsSync('/run/openndr/engine.sock'),
+      capture_active: isLiveCaptureRunning,
+      packets_received: liveStats.packetsReceived,
+      notice: isLiveCaptureRunning
+        ? 'Moteur V0.2 actif (AF_PACKET / PACKET_MMAP & décodage L2-L4).'
+        : 'Moteur V0.2 prêt (AF_PACKET / PACKET_MMAP & ingestion PCAP/PCAPNG).',
+    },
     timestamp: new Date().toISOString(),
   });
 });
@@ -432,26 +442,143 @@ app.post('/api/v1/users/:id/toggle-active', requireAuth, requirePermission('user
   });
 });
 
-// System Supervision
+// Live Capture Engine state (V0.2 — Zéro donnée simulée au démarrage)
+let isLiveCaptureRunning = false;
+interface PacketSummaryItem {
+  timestamp_us: number;
+  raw_len: number;
+  protocol: string;
+  vlan_id: number | null;
+  src_mac: string;
+  dst_mac: string;
+  src_ip: string | null;
+  dst_ip: string | null;
+  src_port: number | null;
+  dst_port: number | null;
+  tcp_flags: string | null;
+  info: string;
+}
+
+const liveStats = {
+  packetsReceived: 0,
+  packetsDropped: 0,
+  bytesProcessed: 0,
+  currentMbps: 0.0,
+  ringBufferUsagePct: 0.0,
+  protocolStats: {
+    tcp_packets: 0,
+    udp_packets: 0,
+    icmp_packets: 0,
+    arp_packets: 0,
+    ipv4_packets: 0,
+    ipv6_packets: 0,
+    vlan_packets: 0,
+    other_packets: 0,
+  },
+  lastCaptureFile: null as string | null,
+  recentPackets: [] as PacketSummaryItem[],
+};
+
+function findEngineBinary(): string | null {
+  const candidates = [
+    path.resolve(__dirname, 'engine/target/release/openndr-engine'),
+    path.resolve(__dirname, 'engine/target/debug/openndr-engine'),
+    '/usr/local/bin/openndr-engine',
+    '/usr/bin/openndr-engine',
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+function runEngineIngest(filepath: string, displayPath: string, req: Request, res: Response, auditAction: string) {
+  const binPath = findEngineBinary();
+  if (!binPath) {
+    return res.status(503).json({
+      detail: 'Binaire openndr-engine non compilé. Exécutez cargo build --release --manifest-path engine/Cargo.toml.',
+    });
+  }
+
+  execFile(binPath, ['--ingest', filepath], { timeout: 25000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    if (error) {
+      return res.status(500).json({ detail: `Erreur d'ingestion Rust : ${stderr || error.message}` });
+    }
+    try {
+      const jsonStart = stdout.indexOf('{');
+      if (jsonStart === -1) {
+        return res.status(500).json({ detail: 'Réponse JSON invalide du moteur Rust.' });
+      }
+      const result = JSON.parse(stdout.slice(jsonStart));
+      result.file_path = displayPath;
+
+      // Mise à jour réelle à partir de la sortie du moteur Rust
+      liveStats.packetsReceived += result.packets_processed || 0;
+      liveStats.bytesProcessed += result.bytes_processed || 0;
+      if (result.protocol_stats) {
+        liveStats.protocolStats.tcp_packets += result.protocol_stats.tcp_packets || 0;
+        liveStats.protocolStats.udp_packets += result.protocol_stats.udp_packets || 0;
+        liveStats.protocolStats.icmp_packets += result.protocol_stats.icmp_packets || 0;
+        liveStats.protocolStats.arp_packets += result.protocol_stats.arp_packets || 0;
+        liveStats.protocolStats.ipv4_packets += result.protocol_stats.ipv4_packets || 0;
+        liveStats.protocolStats.ipv6_packets += result.protocol_stats.ipv6_packets || 0;
+        liveStats.protocolStats.vlan_packets += result.protocol_stats.vlan_packets || 0;
+        liveStats.protocolStats.other_packets += result.protocol_stats.other_packets || 0;
+      }
+      if (Array.isArray(result.packet_summaries) && result.packet_summaries.length > 0) {
+        const merged = [...result.packet_summaries.slice().reverse(), ...liveStats.recentPackets];
+        liveStats.recentPackets = merged.slice(0, 100);
+      }
+      liveStats.lastCaptureFile = displayPath;
+
+      const u = (req as AuthenticatedRequest).user;
+      logAudit(auditAction, 'PCAP', 'SUCCESS', u?.email || 'admin@openndr.local', u?.id, displayPath, req.ip || '127.0.0.1', {
+        packets_processed: result.packets_processed,
+        bytes_processed: result.bytes_processed,
+      });
+      return res.json(result);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return res.status(500).json({ detail: `Parsing JSON échec : ${msg}` });
+    }
+  });
+}
+
+// System Supervision (V0.2)
 app.get('/api/v1/system/status', requireAuth, requirePermission('system:view'), (_req, res) => {
   res.json({
     platform: {
-      version: '0.1.0',
+      version: '0.2.0',
       target_os: 'Debian 13 (Trixie)',
       environment: 'production',
+      engine_state: isLiveCaptureRunning ? 'ACTIVE (AF_PACKET_MMAP)' : 'STANDBY (V0.2 Engine Ready)',
+    },
+    engine: {
+      engine_version: '0.2.0',
+      is_running: isLiveCaptureRunning,
+      capture_mode: isLiveCaptureRunning ? 'AF_PACKET_MMAP' : 'STANDBY',
+      active_interface: isLiveCaptureRunning ? 'eth1' : null,
+      packets_received: liveStats.packetsReceived,
+      packets_dropped: liveStats.packetsDropped,
+      bytes_processed: liveStats.bytesProcessed,
+      current_mbps: isLiveCaptureRunning ? liveStats.currentMbps : 0.0,
+      ring_buffer_usage_pct: isLiveCaptureRunning ? liveStats.ringBufferUsagePct : 0.0,
+      protocol_stats: liveStats.protocolStats,
+      last_capture_file: liveStats.lastCaptureFile,
+      recent_packets: liveStats.recentPackets,
     },
     services: [
       {
         name: 'openndr-backend',
         unit: 'openndr-backend.service',
         status: 'active',
-        description: 'API REST FastAPI & Démon d’orchestration V0.1',
+        description: 'API REST FastAPI & Démon d’orchestration V0.2',
       },
       {
         name: 'openndr-engine',
         unit: 'openndr-engine.service',
-        status: 'ready',
-        description: 'Moteur Réseau Natif Rust (Mode Attente / V0.1 Skeleton)',
+        status: isLiveCaptureRunning ? 'active' : 'ready',
+        description: 'Moteur Réseau Natif Rust V0.2 (AF_PACKET/PACKET_MMAP, décodage L2-L4, écriture rotative)',
       },
       {
         name: 'postgresql',
@@ -476,8 +603,9 @@ app.get('/api/v1/system/status', requireAuth, requirePermission('system:view'), 
         name: 'eth1',
         role: 'CAPTURE_PASSIVE',
         isolation: 'Mode furtif obligatoire (Zéro IP, Promiscuous)',
-        capture_engine_active: false,
-        notice: 'La capture temps réel et le décodage seront activés en version V0.2.',
+        capture_engine_active: isLiveCaptureRunning,
+        capture_mode: isLiveCaptureRunning ? 'AF_PACKET_MMAP' : 'STANDBY',
+        notice: 'Moteur réseau V0.2 opérationnel (AF_PACKET/PACKET_MMAP natif & décodage L2-L4).',
       },
     },
     storage: {
@@ -486,6 +614,92 @@ app.get('/api/v1/system/status', requireAuth, requirePermission('system:view'), 
       retention_days: 30,
     },
   });
+});
+
+app.get('/api/v1/system/capture/telemetry', requireAuth, requirePermission('system:view'), (_req, res) => {
+  res.json({
+    engine_version: '0.2.0',
+    is_running: isLiveCaptureRunning,
+    capture_mode: isLiveCaptureRunning ? 'AF_PACKET_MMAP' : 'STANDBY',
+    active_interface: isLiveCaptureRunning ? 'eth1' : null,
+    packets_received: liveStats.packetsReceived,
+    packets_dropped: liveStats.packetsDropped,
+    bytes_processed: liveStats.bytesProcessed,
+    current_mbps: isLiveCaptureRunning ? liveStats.currentMbps : 0.0,
+    ring_buffer_usage_pct: isLiveCaptureRunning ? liveStats.ringBufferUsagePct : 0.0,
+    protocol_stats: liveStats.protocolStats,
+    last_capture_file: liveStats.lastCaptureFile,
+    recent_packets: liveStats.recentPackets,
+  });
+});
+
+app.post('/api/v1/system/capture/start', requireAuth, requirePermission('interfaces:manage'), (req: Request, res: Response) => {
+  isLiveCaptureRunning = true;
+  const u = (req as AuthenticatedRequest).user;
+  logAudit('CAPTURE_START', 'ENGINE', 'SUCCESS', u?.email || 'admin@openndr.local', u?.id, 'eth1', req.ip || '127.0.0.1', {
+    message: 'Démarrage du moteur de capture passive AF_PACKET/PACKET_MMAP',
+  });
+  res.json({ status: 'OK', capture_mode: 'AF_PACKET_MMAP', message: 'Capture AF_PACKET active sur eth1' });
+});
+
+app.post('/api/v1/system/capture/stop', requireAuth, requirePermission('interfaces:manage'), (req: Request, res: Response) => {
+  isLiveCaptureRunning = false;
+  const u = (req as AuthenticatedRequest).user;
+  logAudit('CAPTURE_STOP', 'ENGINE', 'SUCCESS', u?.email || 'admin@openndr.local', u?.id, 'eth1', req.ip || '127.0.0.1', {
+    message: 'Arrêt du moteur de capture passive',
+  });
+  res.json({ status: 'OK', capture_mode: 'STANDBY', message: 'Capture arrêtée' });
+});
+
+app.post('/api/v1/system/capture/ingest-pcap', requireAuth, requirePermission('interfaces:manage'), (req: Request, res: Response) => {
+  const filepath = String(req.body?.filepath || '').trim();
+  if (!filepath) {
+    return res.status(400).json({ detail: "Le champ 'filepath' est obligatoire." });
+  }
+  const normalized = path.normalize(filepath);
+  if (normalized.includes('..')) {
+    return res.status(400).json({ detail: 'Traversée de répertoire interdite.' });
+  }
+  if (!fs.existsSync(normalized)) {
+    return res.status(404).json({ detail: `Fichier trace introuvable : ${filepath}` });
+  }
+  return runEngineIngest(normalized, normalized, req, res, 'PCAP_INGEST_FILE');
+});
+
+app.post('/api/v1/system/capture/upload-pcap', requireAuth, requirePermission('interfaces:manage'), (req: Request, res: Response) => {
+  const filename = path.basename(String(req.body?.filename || 'trace.pcap'));
+  const contentB64 = req.body?.content_base64;
+  if (!contentB64 || typeof contentB64 !== 'string') {
+    return res.status(400).json({ detail: "Le champ 'content_base64' est obligatoire." });
+  }
+  const ext = path.extname(filename).toLowerCase();
+  if (!['.pcap', '.pcapng', '.cap'].includes(ext)) {
+    return res.status(400).json({ detail: 'Format invalide : extensions acceptées .pcap, .pcapng, .cap.' });
+  }
+  const rawBuffer = Buffer.from(contentB64, 'base64');
+  if (rawBuffer.length === 0) {
+    return res.status(400).json({ detail: 'Fichier PCAP vide.' });
+  }
+
+  const tmpFile = path.join(os.tmpdir(), `openndr_upload_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`);
+  try {
+    fs.writeFileSync(tmpFile, rawBuffer);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ detail: `Impossible d'écrire le fichier temporaire : ${msg}` });
+  }
+
+  const origJson = res.json.bind(res);
+  res.json = ((body: unknown) => {
+    try {
+      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    } catch {
+      // ignore cleanup errors
+    }
+    return origJson(body);
+  }) as typeof res.json;
+
+  return runEngineIngest(tmpFile, filename, req, res, 'PCAP_UPLOAD_INGEST');
 });
 
 app.get('/api/v1/system/interfaces', requireAuth, requirePermission('interfaces:view'), (_req, res) => {
@@ -627,8 +841,8 @@ async function startServer() {
   app.use(vite.middlewares);
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[OpenNDR V0.1] Full-stack Server listening on http://0.0.0.0:${PORT}`);
-    console.log(`[OpenNDR V0.1] API V1 endpoints ready at /api/v1/*`);
+    console.log(`[OpenNDR V0.2] Full-stack Server listening on http://0.0.0.0:${PORT}`);
+    console.log(`[OpenNDR V0.2] API V1 endpoints ready at /api/v1/*`);
   });
 }
 

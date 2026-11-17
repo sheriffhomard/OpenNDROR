@@ -30,19 +30,19 @@ export const DocsView: React.FC = () => {
     {
       version: 'V0.2',
       title: 'Capture & Décodage des Paquets',
-      status: 'PROCHAINE ÉTAPE',
-      completed: false,
+      status: 'TERMINÉ',
+      completed: true,
       points: [
-        'Capture passive temps réel AF_PACKET / libpcap et ring buffer mmap',
-        'Import de traces réseau PCAP / PCAPNG',
-        'Décodage hiérarchique : Ethernet II, VLAN 802.1Q, ARP, IPv4, IPv6, TCP, UDP',
-        'Explorateur de paquets initial dans l’interface Web',
+        'Capture passive temps réel AF_PACKET (ring buffer PACKET_MMAP TPACKET_V2) et compatibilité libpcap',
+        'Ingestion et décodage de traces réseau PCAP / PCAPNG',
+        'Décodage hiérarchique L2–L4 : Ethernet II, VLAN 802.1Q, ARP, IPv4, IPv6, ICMP, TCP, UDP',
+        'Écriture PCAP rotative locale et explorateur de paquets dans l’interface Web',
       ],
     },
     {
       version: 'V0.3',
       title: 'Flux & Protocoles',
-      status: 'PLANIFIÉ',
+      status: 'PROCHAINE ÉTAPE',
       completed: false,
       points: [
         'Reconstruction des communications TCP/UDP et gestion des sessions',
@@ -269,7 +269,7 @@ export const DocsView: React.FC = () => {
       {activeDoc === 'specs' && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
           <h3 className="text-sm font-semibold text-slate-100">
-            Spécification des Endpoints de l’API REST V0.1
+            Spécification des Endpoints de l’API REST V0.2
           </h3>
           <p className="text-xs text-slate-400">
             Contrats d'interface OpenAPI normalisés pour l'intégration avec le SIEM ou l'interface SOC.
@@ -281,7 +281,7 @@ export const DocsView: React.FC = () => {
                 <span className="text-emerald-400 font-bold">GET</span>
                 <span className="text-slate-200">/api/v1/health</span>
               </div>
-              <span className="text-slate-500">Public · Vérification de santé</span>
+              <span className="text-slate-500">Public · Vérification de santé plateforme & moteur</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -302,7 +302,28 @@ export const DocsView: React.FC = () => {
                 <span className="text-emerald-400 font-bold">GET</span>
                 <span className="text-slate-200">/api/v1/system/status</span>
               </div>
-              <span className="text-slate-500">system:view · Télémétrie services</span>
+              <span className="text-slate-500">system:view · Télémétrie services & moteur</span>
+            </div>
+            <div className="py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">GET</span>
+                <span className="text-slate-200">/api/v1/system/capture/telemetry</span>
+              </div>
+              <span className="text-slate-500">system:view · Débit, drops & compteurs L2–L4</span>
+            </div>
+            <div className="py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sky-400 font-bold">POST</span>
+                <span className="text-slate-200">/api/v1/system/capture/start | stop</span>
+              </div>
+              <span className="text-slate-500">interfaces:manage · Pilotage capture AF_PACKET</span>
+            </div>
+            <div className="py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sky-400 font-bold">POST</span>
+                <span className="text-slate-200">/api/v1/system/capture/ingest-pcap | upload-pcap</span>
+              </div>
+              <span className="text-slate-500">interfaces:manage · Décodage traces PCAP/PCAPNG</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">

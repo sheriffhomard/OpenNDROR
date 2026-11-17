@@ -9,13 +9,15 @@ import {
   Server,
   Layers,
 } from 'lucide-react';
-import { SystemService, NetworkInterfaceConfig, StorageMetrics } from '../types/system';
+import { SystemService, NetworkInterfaceConfig, StorageMetrics, EngineTelemetry } from '../types/system';
 
 interface DashboardViewProps {
   services: SystemService[];
   interfaces: NetworkInterfaceConfig[];
   storage: StorageMetrics | null;
+  telemetry?: EngineTelemetry | null;
   canManageSystem: boolean;
+  onNavigateToCapture?: () => void;
   onNavigateToInterfaces: () => void;
   onNavigateToValidation: () => void;
 }
@@ -24,12 +26,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   services,
   interfaces,
   storage,
+  telemetry,
+  onNavigateToCapture,
   onNavigateToInterfaces,
   onNavigateToValidation,
 }) => {
   const passiveInterface = interfaces.find((i) => i.role === 'CAPTURE_PASSIVE');
   const adminInterface = interfaces.find((i) => i.role === 'ADMINISTRATION');
   const isPassiveCompliant = passiveInterface?.isStealthCompliant ?? true;
+  const isCaptureRunning = telemetry?.is_running ?? false;
+  const packetsReceived = telemetry?.packets_received ?? 0;
 
   return (
     <div className="space-y-6">
@@ -38,22 +44,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-100">Plateforme OpenNDR — Version V0.1</span>
+              <span className="text-sm font-semibold text-slate-100">Plateforme OpenNDR — Version V0.2</span>
               <span className="text-xs text-slate-500">·</span>
-              <span className="text-xs text-emerald-400 font-medium">Socle Technique Opérationnel</span>
+              <span className="text-xs text-emerald-400 font-medium">
+                {isCaptureRunning ? 'Capture Passive & Décodage L2–L4 Actifs' : 'Moteur Réseau L2–L4 Opérationnel'}
+              </span>
             </div>
             <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
               Sonde de détection et réponse réseau autonome pour Debian 13.
-              Backend FastAPI opérationnel, base relationnelle PostgreSQL synchronisée par Alembic, moteur Rust minimal en attente V0.2.
+              Capture passive AF_PACKET (PACKET_MMAP), ingestion PCAP/PCAPNG, décodage hiérarchique L2–L4 et stockage PCAP rotatif local.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            {onNavigateToCapture && (
+              <button
+                onClick={onNavigateToCapture}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
+              >
+                <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                Capture & PCAP
+              </button>
+            )}
             <button
               onClick={onNavigateToValidation}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap shrink-0"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              Lancer la Recette V0.1
+              Lancer la Recette
             </button>
           </div>
         </div>
@@ -82,14 +99,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 1: Capture Engine Status */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Moteur Réseau Rust</span>
-            <Radio className="w-4 h-4 text-amber-400" />
+            <span>Moteur Réseau Rust V0.2</span>
+            <Radio className={`w-4 h-4 ${isCaptureRunning ? 'text-emerald-400' : 'text-amber-400'}`} />
           </div>
-          <div className="text-lg font-bold text-amber-400 tracking-tight font-mono">
-            STANDBY (V0.1)
+          <div className={`text-lg font-bold tracking-tight font-mono ${isCaptureRunning ? 'text-emerald-400' : 'text-amber-400'}`}>
+            {isCaptureRunning ? `ACTIF (${telemetry?.capture_mode || 'AF_PACKET'})` : 'STANDBY (V0.2)'}
           </div>
-          <div className="mt-2 text-xs text-slate-400">
-            Capture passive : <span className="font-mono text-slate-300">Désactivée (V0.2)</span>
+          <div className="mt-2 text-xs text-slate-400 font-mono tabular-nums">
+            Paquets décodés : <span className="text-slate-200">{packetsReceived.toLocaleString('fr-FR')}</span>
+            {telemetry && telemetry.current_mbps > 0 ? ` · ${telemetry.current_mbps.toFixed(2)} Mbps` : ''}
           </div>
         </div>
 

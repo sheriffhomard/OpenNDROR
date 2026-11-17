@@ -277,6 +277,99 @@ class TestApiAndDatabaseV01(unittest.TestCase):
         )
         self.assertEqual(res_me_after.status_code, 401)
 
+    def test_v02_capture_and_pcap_ingestion(self):
+        import base64
+        import struct
+        import tempfile
+
+        token_admin = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@test.local", "password": "AdminSecurePass2026!"},
+        ).json()["access_token"]
+
+        token_obs = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "observer@test.local", "password": "ObserverSecurePass2026!"},
+        ).json()["access_token"]
+
+        # 0. Health V0.2 check
+        res_health = self.client.get("/api/v1/health")
+        self.assertEqual(res_health.status_code, 200)
+        health_json = res_health.json()
+        self.assertEqual(health_json.get("version"), "0.2.0")
+        self.assertEqual(health_json["capture_engine"]["version"], "0.2.0")
+
+        # 1. Télémétrie V0.2
+        res_telem = self.client.get(
+            "/api/v1/system/capture/telemetry",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(res_telem.status_code, 200)
+        telem = res_telem.json()
+        self.assertEqual(telem.get("engine_version"), "0.2.0")
+        self.assertIn("protocol_stats", telem)
+        self.assertIn("recent_packets", telem)
+
+        # Construire un fichier PCAP valide minimal avec 1 paquet Ethernet + IPv4 + TCP SYN
+        eth_hdr = bytes.fromhex("00112233445566778899aabb0800")
+        ip_hdr = bytes.fromhex("450000280001000040060000c0a8010ac0a80114")
+        tcp_hdr = bytes.fromhex("d43101bb00000001000000005002ffff00000000")
+        frame = eth_hdr + ip_hdr + tcp_hdr
+        pcap_global = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)
+        pcap_pkt = struct.pack("<IIII", 1730000000, 123456, len(frame), len(frame)) + frame
+        pcap_bytes = pcap_global + pcap_pkt
+
+        with tempfile.NamedTemporaryFile(suffix=".pcap", delete=False) as tmp:
+            tmp.write(pcap_bytes)
+            tmp_pcap_path = tmp.name
+
+        try:
+            # 2. Ingestion via chemin fichier (si binaire openndr-engine compilé)
+            from app.services.system_service import SystemService
+            if SystemService._find_engine_binary():
+                res_ingest = self.client.post(
+                    "/api/v1/system/capture/ingest-pcap",
+                    headers={"Authorization": f"Bearer {token_admin}"},
+                    json={"filepath": tmp_pcap_path},
+                )
+                self.assertEqual(res_ingest.status_code, 200)
+                data = res_ingest.json()
+                self.assertEqual(data["packets_processed"], 1)
+                self.assertEqual(data["protocol_stats"]["tcp_packets"], 1)
+                self.assertEqual(data["protocol_stats"]["ipv4_packets"], 1)
+                self.assertEqual(len(data["packet_summaries"]), 1)
+                self.assertEqual(data["packet_summaries"][0]["protocol"], "TCP")
+                self.assertEqual(data["packet_summaries"][0]["dst_port"], 443)
+
+                # 3. Upload base64 via SOC endpoint
+                b64_payload = base64.b64encode(pcap_bytes).decode("ascii")
+                res_upload = self.client.post(
+                    "/api/v1/system/capture/upload-pcap",
+                    headers={"Authorization": f"Bearer {token_admin}"},
+                    json={"filename": "unit_test.pcap", "content_base64": b64_payload},
+                )
+                self.assertEqual(res_upload.status_code, 200)
+                up_data = res_upload.json()
+                self.assertEqual(up_data["file_path"], "unit_test.pcap")
+                self.assertEqual(up_data["packets_processed"], 1)
+        finally:
+            if os.path.exists(tmp_pcap_path):
+                os.remove(tmp_pcap_path)
+
+        # 4. RBAC : Observer ne peut pas démarrer la capture ni uploader un PCAP
+        res_forbidden = self.client.post(
+            "/api/v1/system/capture/start",
+            headers={"Authorization": f"Bearer {token_obs}"},
+        )
+        self.assertEqual(res_forbidden.status_code, 403)
+
+        res_forbidden_upload = self.client.post(
+            "/api/v1/system/capture/upload-pcap",
+            headers={"Authorization": f"Bearer {token_obs}"},
+            json={"filename": "test.pcap", "content_base64": "AAAA"},
+        )
+        self.assertEqual(res_forbidden_upload.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

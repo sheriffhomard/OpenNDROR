@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   LayoutDashboard,
+  Activity,
   Network,
   Users,
   FileText,
@@ -10,6 +11,7 @@ import {
 
 export type TabId =
   | 'dashboard'
+  | 'capture'
   | 'interfaces'
   | 'rbac'
   | 'audit'
@@ -28,7 +30,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   hasViolation,
 }) => {
   const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string; alert?: boolean }[] = [
-    { id: 'dashboard', label: 'Tableau de bord V0.1', icon: LayoutDashboard },
+    { id: 'dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
+    { id: 'capture', label: 'Capture & Décodage V0.2', icon: Activity },
     {
       id: 'interfaces',
       label: 'Interfaces & Isolation',
@@ -37,7 +40,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     },
     { id: 'rbac', label: 'Accès & Rôles RBAC', icon: Users },
     { id: 'audit', label: 'Journal d’Audit', icon: FileText },
-    { id: 'validation', label: 'Recette & Validation V0.1', icon: CheckCircle2 },
+    { id: 'validation', label: 'Recette & Validation', icon: CheckCircle2 },
     { id: 'docs', label: 'Architecture & Déploiement', icon: BookOpen },
   ];
 

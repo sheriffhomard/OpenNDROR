@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { Navigation, TabId } from './components/Navigation';
 import { DashboardView } from './components/DashboardView';
+import { CaptureView } from './components/CaptureView';
 import { InterfacesView } from './components/InterfacesView';
 import { RbacView } from './components/RbacView';
 import { AuditView } from './components/AuditView';
@@ -15,6 +16,7 @@ import {
   NetworkInterfaceConfig,
   StorageMetrics,
   AuditLogItem,
+  EngineTelemetry,
 } from './types/system';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 
@@ -24,6 +26,7 @@ export default function App() {
   const [services, setServices] = useState<SystemService[]>([]);
   const [interfaces, setInterfaces] = useState<NetworkInterfaceConfig[]>([]);
   const [storage, setStorage] = useState<StorageMetrics | null>(null);
+  const [telemetry, setTelemetry] = useState<EngineTelemetry | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -39,8 +42,18 @@ export default function App() {
     try {
       const statusData = await apiService.getSystemStatus();
       setServices(statusData.services || []);
+      if (statusData.engine) {
+        setTelemetry(statusData.engine);
+      }
     } catch {
       // Ignorer si le backend n'a pas encore répondu
+    }
+
+    try {
+      const telem = await apiService.getCaptureTelemetry();
+      setTelemetry(telem);
+    } catch {
+      // Ignorer si non disponible
     }
 
     try {
@@ -198,9 +211,20 @@ export default function App() {
             services={services}
             interfaces={interfaces}
             storage={storage}
+            telemetry={telemetry}
             canManageSystem={apiService.hasPermission('system:manage')}
+            onNavigateToCapture={() => setActiveTab('capture')}
             onNavigateToInterfaces={() => setActiveTab('interfaces')}
             onNavigateToValidation={() => setActiveTab('validation')}
+          />
+        )}
+
+        {activeTab === 'capture' && (
+          <CaptureView
+            telemetry={telemetry}
+            canManageCapture={apiService.hasPermission('interfaces:manage')}
+            onRefreshTelemetry={refreshData}
+            onNotify={showToast}
           />
         )}
 
@@ -231,7 +255,7 @@ export default function App() {
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            OpenNDR v0.1.0 · Moteur Réseau Autonome sous licence AGPL-3.0
+            OpenNDR v0.2.0 · Moteur Réseau Autonome sous licence AGPL-3.0
           </div>
           <div className="flex items-center gap-4 text-slate-400">
             <span>Debian 13 (Trixie)</span>

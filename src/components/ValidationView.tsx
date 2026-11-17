@@ -34,7 +34,7 @@ export const ValidationView: React.FC = () => {
       id: 'probe-health',
       category: 'ARCH',
       name: 'Rapport Global de Santé Plateforme',
-      description: 'Interroge /api/v1/health pour vérifier les composants et la version V0.1.',
+      description: 'Interroge /api/v1/health pour vérifier les composants et la version V0.2.',
       status: 'pending',
     },
     {
@@ -61,8 +61,8 @@ export const ValidationView: React.FC = () => {
     {
       id: 'probe-engine-standby',
       category: 'SYSTEMD',
-      name: 'Statut Honnête du Moteur Rust (Standby V0.1)',
-      description: 'Vérifie que le moteur est déclaré en attente V0.1 sans simulation de paquets.',
+      name: 'Télémétrie Réelle du Moteur Rust V0.2',
+      description: 'Interroge /api/v1/system/capture/telemetry et vérifie le moteur V0.2 sans trafic simulé.',
       status: 'pending',
     },
     {
@@ -76,8 +76,8 @@ export const ValidationView: React.FC = () => {
 
   const [isRunning, setIsRunning] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState<string[]>([
-    'Banc de validation technique OpenNDR V0.1 prêt.',
-    'Chaque test exécute une sonde HTTP réelle contre le serveur FastAPI.',
+    'Banc de validation technique OpenNDR V0.2 prêt.',
+    'Chaque test exécute une sonde HTTP réelle contre le serveur backend.',
   ]);
 
   const updateTest = (id: string, partial: Partial<ValidationTestItem>) => {
@@ -274,26 +274,24 @@ export const ValidationView: React.FC = () => {
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Isolation Furtive: ${msg}`]);
     }
 
-    // Test 7: Moteur en standby V0.1
+    // Test 7: Moteur de capture V0.2 (Télémétrie réelle)
     updateTest('probe-engine-standby', { status: 'running' });
     const t6 = performance.now();
     try {
-      const statusRes = await apiService.getSystemStatus();
+      const telem = await apiService.getCaptureTelemetry();
       const dur = Math.round(performance.now() - t6);
-      const engineService = statusRes.services.find((s) => s.unit === 'openndr-engine.service');
-      const captureActive = statusRes.interfaces.capture.capture_engine_active;
-      if (!captureActive) {
+      if (telem && telem.engine_version === '0.2.0' && telem.protocol_stats) {
         updateTest('probe-engine-standby', {
           status: 'passed',
           durationMs: dur,
-          details: `Statut honnête validé : moteur en standby (${engineService?.status || 'ready'}), capture V0.2 désactivée.`,
+          details: `Moteur v${telem.engine_version} (${telem.capture_mode}) · ${telem.packets_received} paquets traités.`,
         });
         setConsoleLogs((prev) => [
           ...prev,
-          `[✓ PASS] Moteur Rust Standby (${dur}ms): Zéro paquet simulé, attente V0.2 confirmée.`,
+          `[✓ PASS] Moteur Rust V0.2 (${dur}ms): mode=${telem.capture_mode}, packets=${telem.packets_received}.`,
         ]);
       } else {
-        throw new Error('Annonce trompeuse de capture active détectée');
+        throw new Error('Réponse de télémétrie V0.2 incomplète');
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t6);
@@ -303,7 +301,7 @@ export const ValidationView: React.FC = () => {
         durationMs: dur,
         details: msg,
       });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Moteur Rust: ${msg}`]);
+      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Moteur Rust V0.2: ${msg}`]);
     }
 
     // Test 8: Quota stockage
@@ -335,7 +333,7 @@ export const ValidationView: React.FC = () => {
     setIsRunning(false);
     setConsoleLogs((prev) => [
       ...prev,
-      `--- Recette V0.1 terminée à ${new Date().toLocaleTimeString()} ---`,
+      `--- Recette V0.2 terminée à ${new Date().toLocaleTimeString()} ---`,
     ]);
   };
 
@@ -357,11 +355,11 @@ export const ValidationView: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-100">
-              Banc de Recette & Validation Automatisée V0.1
+              Banc de Recette & Validation Automatisée V0.2
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Exécution de sondes HTTP réelles contre le backend FastAPI pour vérifier les critères d’acceptation stricts
-              (authentification, base PostgreSQL, isolation réseau, RBAC, statut honnête du moteur).
+              Exécution de sondes HTTP réelles contre le backend pour vérifier les critères d’acceptation stricts
+              (authentification, base PostgreSQL, isolation réseau, RBAC, moteur de capture V0.2).
             </p>
           </div>
 

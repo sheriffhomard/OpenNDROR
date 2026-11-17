@@ -37,8 +37,18 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Synchronise les données depuis l'API FastAPI réelle
+  // Synchronise les données depuis l'API réelle
   const refreshData = useCallback(async () => {
+    if (!apiService.isAuthenticated()) {
+      setServices([]);
+      setInterfaces([]);
+      setStorage(null);
+      setTelemetry(null);
+      setUsers([]);
+      setAuditLogs([]);
+      return;
+    }
+
     try {
       const statusData = await apiService.getSystemStatus();
       setServices(statusData.services || []);

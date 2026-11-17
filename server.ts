@@ -442,6 +442,47 @@ app.post('/api/v1/users/:id/toggle-active', requireAuth, requirePermission('user
   });
 });
 
+app.put('/api/v1/users/:id', requireAuth, requirePermission('users:manage'), (req: AuthenticatedRequest, res: Response) => {
+  const target = usersStore.find((u) => u.id === req.params.id);
+  if (!target) {
+    return res.status(404).json({ detail: 'Utilisateur introuvable.' });
+  }
+  const { role_name, full_name } = req.body;
+  if (role_name && ['Administrator', 'Analyst', 'Observer'].includes(role_name)) {
+    target.role = role_name;
+  }
+  if (full_name && typeof full_name === 'string') {
+    target.fullName = full_name.trim();
+  }
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  logAudit('USER_UPDATED', 'USER', 'SUCCESS', req.user!.email, req.user!.id, target.id, ip, { role: target.role });
+
+  res.json({
+    id: target.id,
+    email: target.email,
+    full_name: target.fullName,
+    role: target.role,
+    permissions: rolePermissions[target.role] || [],
+    is_active: target.isActive,
+    created_at: target.createdAt,
+  });
+});
+
+app.delete('/api/v1/users/:id', requireAuth, requirePermission('users:manage'), (req: AuthenticatedRequest, res: Response) => {
+  const idx = usersStore.findIndex((u) => u.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ detail: 'Utilisateur introuvable.' });
+  }
+  const target = usersStore[idx];
+  if (target.id === req.user!.id) {
+    return res.status(400).json({ detail: 'Impossible de supprimer votre propre compte administrateur.' });
+  }
+  usersStore.splice(idx, 1);
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  logAudit('USER_DELETED', 'USER', 'SUCCESS', req.user!.email, req.user!.id, target.id, ip, { email: target.email });
+  res.status(204).send();
+});
+
 // Live Capture Engine state (V0.2 — Zéro donnée simulée au démarrage)
 let isLiveCaptureRunning = false;
 interface PacketSummaryItem {
@@ -833,12 +874,19 @@ app.get('/api/v1/system/audit', requireAuth, requirePermission('audit:view'), (r
 
 // Vite middleware integration
 async function startServer() {
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa',
-  });
-
-  app.use(vite.middlewares);
+  const distDir = path.resolve(__dirname, 'dist');
+  if (process.env.NODE_ENV === 'production' && fs.existsSync(distDir)) {
+    app.use(express.static(distDir));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+  } else {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  }
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[OpenNDR V0.2] Full-stack Server listening on http://0.0.0.0:${PORT}`);

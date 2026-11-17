@@ -22,38 +22,38 @@ logger = logging.getLogger("openndr.api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Validation des invariants de production
+    # Production invariant validation
     settings.validate_production_invariants()
-    logger.info(f"Démarrage d'OpenNDR Backend v{settings.VERSION} en environnement [{settings.OPENNDR_ENV}]")
+    logger.info(f"Starting OpenNDR Backend v{settings.VERSION} in [{settings.OPENNDR_ENV}] environment")
 
-    # Contrôle de la connectivité base de données au démarrage
+    # Startup database connectivity check
     from app.core.database import check_database_connection
     db_ok, db_msg = check_database_connection()
     if not db_ok and settings.OPENNDR_ENV.lower() == "production":
-        raise RuntimeError(f"[FATAL SÉCURITÉ] Base de données inaccessible en production : {db_msg}")
-    logger.info(f"Connectivité base de données : {db_msg}")
+        raise RuntimeError(f"[FATAL SECURITY] Database unreachable in production: {db_msg}")
+    logger.info(f"Database connectivity: {db_msg}")
 
-    # En environnement de développement local / tests uniquement (hors production)
+    # Local dev / test environment only (non-production)
     if settings.OPENNDR_ENV.lower() != "production" and "sqlite" in settings.DATABASE_URL:
         try:
             Base.metadata.create_all(bind=engine)
         except Exception as e:
-            logger.warning(f"Initialisation dev SQLite : {e}")
+            logger.warning(f"SQLite dev initialization: {e}")
 
     yield
-    logger.info("Arrêt d'OpenNDR Backend")
+    logger.info("Shutting down OpenNDR Backend")
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="API REST de gestion et d'orchestration pour la plateforme OpenNDR",
+    description="REST API for OpenNDR platform management and orchestration",
     docs_url="/api/docs" if settings.OPENNDR_ENV != "production" else None,
     redoc_url="/api/redoc" if settings.OPENNDR_ENV != "production" else None,
     lifespan=lifespan,
 )
 
-# Configuration CORS restrictive conforme aux règles OWASP (aucun wildcard avec credentials)
+# Restrictive CORS configuration compliant with OWASP rules (no wildcard with credentials)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -63,15 +63,15 @@ app.add_middleware(
     max_age=3600,
 )
 
-# Inclusion des routes versionnées V1
+# V1 versioned routes
 app.include_router(api_v1_router, prefix=settings.API_V1_STR)
 
 
-# Gestionnaire global d'exceptions pour éviter toute fuite de secrets ou de traces internes
+# Global exception handler to prevent leaking secrets or internal stack traces
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Erreur non gérée sur {request.method} {request.url.path} : {exc}", exc_info=True)
+    logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Une erreur interne est survenue. L'incident a été consigné pour investigation."},
+        content={"detail": "An internal error occurred. The incident has been logged for investigation."},
     )

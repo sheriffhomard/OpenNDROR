@@ -19,65 +19,65 @@ export const ValidationView: React.FC = () => {
     {
       id: 'probe-live',
       category: 'ARCH',
-      name: 'Vérification de Disponibilité (Liveness Probe)',
-      description: 'Interroge /api/v1/health/live pour vérifier la réactivité du backend FastAPI.',
+      name: 'Availability Check (Liveness Probe)',
+      description: 'Queries /api/v1/health/live to verify FastAPI backend responsiveness.',
       status: 'pending',
     },
     {
       id: 'probe-ready',
       category: 'DATABASE',
-      name: 'Connectivité Relationnelle (Readiness Probe)',
-      description: 'Interroge /api/v1/health/ready pour tester le pool PostgreSQL et la persistance.',
+      name: 'Relational Connectivity (Readiness Probe)',
+      description: 'Queries /api/v1/health/ready to test the PostgreSQL pool and persistence.',
       status: 'pending',
     },
     {
       id: 'probe-health',
       category: 'ARCH',
-      name: 'Rapport Global de Santé Plateforme',
-      description: 'Interroge /api/v1/health pour vérifier les composants et la version V0.2.',
+      name: 'Global Platform Health Report',
+      description: 'Queries /api/v1/health to verify platform components and V0.2 version.',
       status: 'pending',
     },
     {
       id: 'probe-auth-guard',
       category: 'SECURITY',
-      name: 'Contrôle d’Accès Non Authentifié (Rejet 401)',
-      description: 'Tente d’accéder à /api/v1/users sans jeton JWT et vérifie le rejet 401 strict.',
+      name: 'Unauthenticated Access Control (401 Rejection)',
+      description: 'Attempts to access /api/v1/users without a JWT token and verifies strict 401 rejection.',
       status: 'pending',
     },
     {
       id: 'probe-invalid-creds',
       category: 'SECURITY',
-      name: 'Rejet d’Identifiants Invalides & Journalisation',
-      description: 'Envoie de mauvais identifiants à /api/v1/auth/login et vérifie le refus 401.',
+      name: 'Invalid Credentials Rejection & Logging',
+      description: 'Sends invalid credentials to /api/v1/auth/login and verifies the 401 refusal.',
       status: 'pending',
     },
     {
       id: 'probe-stealth-check',
       category: 'NETWORK',
-      name: 'Conformité Furtive de l’Interface Passive',
-      description: 'Vérifie que l’interface de capture passive ne possède aucune adresse IP (zéro émission).',
+      name: 'Passive Interface Stealth Compliance',
+      description: 'Verifies that the passive capture interface has no IP address assigned (zero emission).',
       status: 'pending',
     },
     {
       id: 'probe-engine-standby',
       category: 'SYSTEMD',
-      name: 'Télémétrie Réelle du Moteur Rust V0.2',
-      description: 'Interroge /api/v1/system/capture/telemetry et vérifie le moteur V0.2 sans trafic simulé.',
+      name: 'Real Rust V0.2 Engine Telemetry',
+      description: 'Queries /api/v1/system/capture/telemetry and verifies the V0.2 engine without simulated traffic.',
       status: 'pending',
     },
     {
       id: 'probe-storage-quota',
       category: 'SYSTEMD',
-      name: 'Configuration du Stockage Local PCAP',
-      description: 'Vérifie les quotas et répertoires locaux de stockage PCAP sans dépendance cloud.',
+      name: 'Local PCAP Storage Configuration',
+      description: 'Verifies local PCAP storage quotas and directories with zero cloud dependency.',
       status: 'pending',
     },
   ]);
 
   const [isRunning, setIsRunning] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState<string[]>([
-    'Banc de validation technique OpenNDR V0.2 prêt.',
-    'Chaque test exécute une sonde HTTP réelle contre le serveur backend.',
+    'OpenNDR V0.2 technical validation suite ready.',
+    'Each test executes a live HTTP probe against the backend server.',
   ]);
 
   const updateTest = (id: string, partial: Partial<ValidationTestItem>) => {
@@ -90,7 +90,7 @@ export const ValidationView: React.FC = () => {
     setIsRunning(true);
     setConsoleLogs((prev) => [
       ...prev,
-      `--- Démarrage de la campagne de tests à ${new Date().toLocaleTimeString()} ---`,
+      `--- Starting test campaign at ${new Date().toLocaleTimeString('en-US')} ---`,
     ]);
 
     // Test 1: Liveness Probe
@@ -103,11 +103,11 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-live', {
           status: 'passed',
           durationMs: dur,
-          details: `Backend FastAPI actif et réactif (statut: ${res.status})`,
+          details: `FastAPI backend active and responsive (status: ${res.status})`,
         });
         setConsoleLogs((prev) => [...prev, `[✓ PASS] Liveness Probe (${dur}ms): status=UP`]);
       } else {
-        throw new Error(`Statut inattendu: ${JSON.stringify(res)}`);
+        throw new Error(`Unexpected status: ${JSON.stringify(res)}`);
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t0);
@@ -115,7 +115,7 @@ export const ValidationView: React.FC = () => {
       updateTest('probe-live', {
         status: 'failed',
         durationMs: dur,
-        details: `Échec: ${msg}`,
+        details: `Failed: ${msg}`,
       });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Liveness Probe: ${msg}`]);
     }
@@ -130,11 +130,11 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-ready', {
           status: 'passed',
           durationMs: dur,
-          details: `Connexion PostgreSQL confirmée (status: ${res.status})`,
+          details: `PostgreSQL connection confirmed (status: ${res.status})`,
         });
-        setConsoleLogs((prev) => [...prev, `[✓ PASS] Readiness Probe (${dur}ms): DB connectée`]);
+        setConsoleLogs((prev) => [...prev, `[✓ PASS] Readiness Probe (${dur}ms): DB connected`]);
       } else {
-        throw new Error(res?.details || 'Base de données non prête');
+        throw new Error(res?.details || 'Database not ready');
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t1);
@@ -142,7 +142,7 @@ export const ValidationView: React.FC = () => {
       updateTest('probe-ready', {
         status: 'failed',
         durationMs: dur,
-        details: `Échec: ${msg}`,
+        details: `Failed: ${msg}`,
       });
       setConsoleLogs((prev) => [...prev, `[✗ FAIL] Readiness Probe: ${msg}`]);
     }
@@ -156,11 +156,11 @@ export const ValidationView: React.FC = () => {
       updateTest('probe-health', {
         status: 'passed',
         durationMs: dur,
-        details: `Version ${res.version} · Plateforme cible: ${res.target_platform}`,
+        details: `Version ${res.version} · Target platform: ${res.target_platform}`,
       });
       setConsoleLogs((prev) => [
         ...prev,
-        `[✓ PASS] Rapport Global (${dur}ms): v${res.version} sur ${res.target_platform}`,
+        `[✓ PASS] Global Report (${dur}ms): v${res.version} on ${res.target_platform}`,
       ]);
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t2);
@@ -168,12 +168,12 @@ export const ValidationView: React.FC = () => {
       updateTest('probe-health', {
         status: 'failed',
         durationMs: dur,
-        details: `Échec: ${msg}`,
+        details: `Failed: ${msg}`,
       });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Rapport Global: ${msg}`]);
+      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Global Report: ${msg}`]);
     }
 
-    // Test 4: Rejet 401 Non Authentifié
+    // Test 4: Unauthenticated 401 Rejection
     updateTest('probe-auth-guard', { status: 'running' });
     const t3 = performance.now();
     try {
@@ -185,11 +185,11 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-auth-guard', {
           status: 'passed',
           durationMs: dur,
-          details: `Rejet HTTP 401 conforme sans jeton d'authentification.`,
+          details: `Compliant HTTP 401 rejection without an authentication token.`,
         });
-        setConsoleLogs((prev) => [...prev, `[✓ PASS] Sécurité 401 (${dur}ms): Accès anonyme strictement bloqué.`]);
+        setConsoleLogs((prev) => [...prev, `[✓ PASS] Security 401 (${dur}ms): Anonymous access strictly blocked.`]);
       } else {
-        throw new Error(`Code inattendu reçu: HTTP ${rawRes.status} (401 attendu)`);
+        throw new Error(`Unexpected HTTP status: ${rawRes.status} (expected 401)`);
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t3);
@@ -199,10 +199,10 @@ export const ValidationView: React.FC = () => {
         durationMs: dur,
         details: msg,
       });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Sécurité 401: ${msg}`]);
+      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Security 401: ${msg}`]);
     }
 
-    // Test 5: Rejet de mauvais identifiants
+    // Test 5: Invalid Credentials Rejection
     updateTest('probe-invalid-creds', { status: 'running' });
     const t4 = performance.now();
     try {
@@ -219,11 +219,11 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-invalid-creds', {
           status: 'passed',
           durationMs: dur,
-          details: `Rejet HTTP 401 conforme avec consignation de l'échec dans l'audit log.`,
+          details: `Compliant HTTP 401 rejection with failure recorded in the audit log.`,
         });
-        setConsoleLogs((prev) => [...prev, `[✓ PASS] Rejet mauvais identifiants (${dur}ms): HTTP 401 constaté.`]);
+        setConsoleLogs((prev) => [...prev, `[✓ PASS] Invalid credentials rejected (${dur}ms): HTTP 401 verified.`]);
       } else {
-        throw new Error(`Code inattendu: HTTP ${loginRes.status}`);
+        throw new Error(`Unexpected status code: HTTP ${loginRes.status}`);
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t4);
@@ -233,10 +233,10 @@ export const ValidationView: React.FC = () => {
         durationMs: dur,
         details: msg,
       });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Mauvais identifiants: ${msg}`]);
+      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Invalid credentials: ${msg}`]);
     }
 
-    // Test 6: Conformité d'isolation réseau réelle
+    // Test 6: Real Network Isolation Compliance
     updateTest('probe-stealth-check', { status: 'running' });
     const t5 = performance.now();
     try {
@@ -246,21 +246,21 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-stealth-check', {
           status: 'passed',
           durationMs: dur,
-          details: `Interface ${isolationRes.interface} conforme (${isolationRes.status}) : ${isolationRes.details}`,
+          details: `Interface ${isolationRes.interface} compliant (${isolationRes.status}): ${isolationRes.details}`,
         });
         setConsoleLogs((prev) => [
           ...prev,
-          `[✓ PASS] Isolation Réseau Réelle (${dur}ms): ${isolationRes.details}`,
+          `[✓ PASS] Real Network Isolation (${dur}ms): ${isolationRes.details}`,
         ]);
       } else {
         updateTest('probe-stealth-check', {
           status: 'failed',
           durationMs: dur,
-          details: `État ${isolationRes.status} : ${isolationRes.details}`,
+          details: `Status ${isolationRes.status}: ${isolationRes.details}`,
         });
         setConsoleLogs((prev) => [
           ...prev,
-          `[✗ FAIL] Isolation Réseau Réelle (${dur}ms): État ${isolationRes.status} - ${isolationRes.details}`,
+          `[✗ FAIL] Real Network Isolation (${dur}ms): Status ${isolationRes.status} - ${isolationRes.details}`,
         ]);
       }
     } catch (err: unknown) {
@@ -271,10 +271,10 @@ export const ValidationView: React.FC = () => {
         durationMs: dur,
         details: msg,
       });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Isolation Furtive: ${msg}`]);
+      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Stealth Isolation: ${msg}`]);
     }
 
-    // Test 7: Moteur de capture V0.2 (Télémétrie réelle)
+    // Test 7: V0.2 Capture Engine (Real Telemetry)
     updateTest('probe-engine-standby', { status: 'running' });
     const t6 = performance.now();
     try {
@@ -284,14 +284,14 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-engine-standby', {
           status: 'passed',
           durationMs: dur,
-          details: `Moteur v${telem.engine_version} (${telem.capture_mode}) · ${telem.packets_received} paquets traités.`,
+          details: `Engine v${telem.engine_version} (${telem.capture_mode}) · ${telem.packets_received} packets processed.`,
         });
         setConsoleLogs((prev) => [
           ...prev,
-          `[✓ PASS] Moteur Rust V0.2 (${dur}ms): mode=${telem.capture_mode}, packets=${telem.packets_received}.`,
+          `[✓ PASS] Rust Engine V0.2 (${dur}ms): mode=${telem.capture_mode}, packets=${telem.packets_received}.`,
         ]);
       } else {
-        throw new Error('Réponse de télémétrie V0.2 incomplète');
+        throw new Error('Incomplete V0.2 telemetry response');
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t6);
@@ -301,10 +301,10 @@ export const ValidationView: React.FC = () => {
         durationMs: dur,
         details: msg,
       });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Moteur Rust V0.2: ${msg}`]);
+      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Rust Engine V0.2: ${msg}`]);
     }
 
-    // Test 8: Quota stockage
+    // Test 8: Storage Quota
     updateTest('probe-storage-quota', { status: 'running' });
     const t7 = performance.now();
     try {
@@ -313,11 +313,11 @@ export const ValidationView: React.FC = () => {
       updateTest('probe-storage-quota', {
         status: 'passed',
         durationMs: dur,
-        details: `Rétention ${storageRes.retentionDays}j · Quota max: ${storageRes.maxStorageGb} Go sur disque local.`,
+        details: `Retention ${storageRes.retentionDays}d · Max quota: ${storageRes.maxStorageGb} GB on local disk.`,
       });
       setConsoleLogs((prev) => [
         ...prev,
-        `[✓ PASS] Quota Stockage (${dur}ms): ${storageRes.maxStorageGb} Go configurés.`,
+        `[✓ PASS] Storage Quota (${dur}ms): ${storageRes.maxStorageGb} GB configured.`,
       ]);
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t7);
@@ -327,13 +327,13 @@ export const ValidationView: React.FC = () => {
         durationMs: dur,
         details: msg,
       });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Stockage: ${msg}`]);
+      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Storage: ${msg}`]);
     }
 
     setIsRunning(false);
     setConsoleLogs((prev) => [
       ...prev,
-      `--- Recette V0.2 terminée à ${new Date().toLocaleTimeString()} ---`,
+      `--- V0.2 validation completed at ${new Date().toLocaleTimeString('en-US')} ---`,
     ]);
   };
 
@@ -355,11 +355,11 @@ export const ValidationView: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-100">
-              Banc de Recette & Validation Automatisée V0.2
+              V0.2 Automated Acceptance & Validation Suite
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Exécution de sondes HTTP réelles contre le backend pour vérifier les critères d’acceptation stricts
-              (authentification, base PostgreSQL, isolation réseau, RBAC, moteur de capture V0.2).
+              Executes live HTTP probes against the backend to verify strict acceptance criteria
+              (authentication, PostgreSQL database, network isolation, RBAC, V0.2 capture engine).
             </p>
           </div>
 
@@ -372,12 +372,12 @@ export const ValidationView: React.FC = () => {
               {isRunning ? (
                 <>
                   <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                  Sondes en cours...
+                  Running Probes...
                 </>
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5" />
-                  Lancer les Sondes Réelles
+                  Run Live Probes
                 </>
               )}
             </button>
@@ -388,11 +388,11 @@ export const ValidationView: React.FC = () => {
         <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between text-xs">
           <div className="flex items-center gap-4">
             <span className="text-slate-400">
-              Résultat : <strong className="text-slate-200">{passedCount}</strong> / {tests.length} tests réussis
+              Result: <strong className="text-slate-200">{passedCount}</strong> / {tests.length} tests passed
             </span>
             {failedCount > 0 && (
               <span className="text-rose-400 font-semibold">
-                {failedCount} échec(s)
+                {failedCount} failed
               </span>
             )}
           </div>
@@ -438,11 +438,11 @@ export const ValidationView: React.FC = () => {
                     {test.status === 'running' && (
                       <span className="flex items-center gap-1 text-amber-400 text-xs font-mono">
                         <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                        TEST...
+                        TESTING...
                       </span>
                     )}
                     {test.status === 'pending' && (
-                      <span className="text-slate-500 text-xs font-mono">EN ATTENTE</span>
+                      <span className="text-slate-500 text-xs font-mono">PENDING</span>
                     )}
                   </div>
                 </div>
@@ -468,7 +468,7 @@ export const ValidationView: React.FC = () => {
       <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
           <Terminal className="w-4 h-4 text-emerald-400" />
-          <span>Journal d'Exécution des Sondes HTTP</span>
+          <span>HTTP Probe Execution Log</span>
         </div>
         <div className="p-3 bg-slate-900 rounded font-mono text-xs text-slate-300 space-y-1 max-h-48 overflow-y-auto">
           {consoleLogs.map((log, idx) => (

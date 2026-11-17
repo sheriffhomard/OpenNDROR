@@ -268,7 +268,7 @@ class TestApiAndDatabaseV01(unittest.TestCase):
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(res_logout.status_code, 200)
-        self.assertEqual(res_logout.json()["message"], "Déconnexion réussie")
+        self.assertEqual(res_logout.json()["message"], "Signed out successfully")
 
         # 4. Requête ultérieure avec le jeton révoqué : impérativement rejetée (401)
         res_me_after = self.client.get(

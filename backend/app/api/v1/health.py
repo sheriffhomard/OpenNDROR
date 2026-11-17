@@ -37,14 +37,14 @@ def readiness(response: Response):
         return {
             "status": "NOT_READY",
             "database_connected": False,
-            "details": f"Base de données inaccessible : {db_msg}",
+            "details": f"Database unreachable: {db_msg}",
             "timestamp": now_iso,
         }
 
     return {
         "status": "READY",
         "database_connected": True,
-        "details": "Base de données relationnelle opérationnelle",
+        "details": "Relational database operational",
         "timestamp": now_iso,
     }
 
@@ -82,9 +82,9 @@ def health_detailed(response: Response):
             "active_interface": engine_info.get("active_interface"),
             "packets_received": engine_info.get("packets_received", 0),
             "notice": (
-                "Moteur V0.2 actif (AF_PACKET / PACKET_MMAP & décodage L2-L4)."
+                "V0.2 engine active (AF_PACKET / PACKET_MMAP & L2-L4 decoding)."
                 if is_running
-                else "Moteur V0.2 en veille (prêt pour capture AF_PACKET et ingestion PCAP/PCAPNG)."
+                else "V0.2 engine on standby (ready for AF_PACKET capture and PCAP/PCAPNG ingestion)."
             ),
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),

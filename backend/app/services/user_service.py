@@ -34,17 +34,17 @@ class UserService:
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Un compte avec cette adresse e-mail existe déjà.",
+                detail="An account with this email address already exists.",
             )
 
         role = db.query(Role).filter(Role.name == user_in.role_name).first()
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Rôle inexistant : {user_in.role_name}. Choisissez 'Administrator', 'Analyst' ou 'Observer'.",
+                detail=f"Unknown role: {user_in.role_name}. Choose 'Administrator', 'Analyst', or 'Observer'.",
             )
 
-        # Mot de passe fourni ou généré aléatoirement
+        # Provided password or randomly generated
         raw_password = user_in.password
         if not raw_password:
             raw_password = f"OpenNDR-{secrets.token_hex(4).upper()}!2026"
@@ -53,7 +53,7 @@ class UserService:
             if not is_valid:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Mot de passe non conforme : {err}",
+                    detail=f"Non-compliant password: {err}",
                 )
 
         new_user = User(
@@ -99,7 +99,7 @@ class UserService:
             if target_user.id == current_admin.id and not user_in.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Impossible de désactiver votre propre compte administrateur.",
+                    detail="Cannot disable your own administrator account.",
                 )
             target_user.is_active = user_in.is_active
 
@@ -108,7 +108,7 @@ class UserService:
             if not new_role:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Rôle inconnu : {user_in.role_name}",
+                    detail=f"Unknown role: {user_in.role_name}",
                 )
             target_user.roles = [new_role]
 
@@ -140,7 +140,7 @@ class UserService:
         if target_user.id == current_admin.id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Impossible de supprimer votre propre compte administrateur.",
+                detail="Cannot delete your own administrator account.",
             )
 
         deleted_email = target_user.email

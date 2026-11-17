@@ -243,7 +243,7 @@ class SystemService:
                 "has_ip": False,
                 "has_routes": False,
                 "is_promiscuous": False,
-                "details": f"L'interface de capture passive '{capture_iface_name}' est introuvable sur le système.",
+                "details": f"Passive capture interface '{capture_iface_name}' was not found on the system.",
             }
 
         iface_data = real_interfaces[capture_iface_name]
@@ -252,7 +252,7 @@ class SystemService:
         has_ip = has_ipv4 or has_ipv6
         is_promisc = iface_data.get("is_promiscuous", False)
 
-        # Vérification des routes associées dans /proc/net/route
+        # Check associated routes in /proc/net/route
         has_routes = False
         try:
             if os.path.exists("/proc/net/route"):
@@ -265,7 +265,7 @@ class SystemService:
         except Exception:
             pass
 
-        # Conflit si admin == capture
+        # Conflict if admin == capture
         if capture_iface_name == settings.ADMIN_INTERFACE:
             return {
                 "interface": capture_iface_name,
@@ -274,7 +274,7 @@ class SystemService:
                 "has_ip": has_ip,
                 "has_routes": has_routes,
                 "is_promiscuous": is_promisc,
-                "details": "L'interface d'administration et l'interface de capture sont identiques. Conflit de sécurité.",
+                "details": "Management interface and capture interface are identical. Security conflict.",
             }
 
         if has_ip:
@@ -286,7 +286,7 @@ class SystemService:
                 "has_ip": True,
                 "has_routes": has_routes,
                 "is_promiscuous": is_promisc,
-                "details": f"Violation de l'isolation furtive : l'interface possède des adresses IP configurées ({ips}).",
+                "details": f"Stealth isolation violation: interface has configured IP addresses ({ips}).",
             }
 
         if has_routes:
@@ -297,7 +297,7 @@ class SystemService:
                 "has_ip": False,
                 "has_routes": True,
                 "is_promiscuous": is_promisc,
-                "details": "Violation de l'isolation : des routes réseau système empruntent l'interface passive.",
+                "details": "Isolation violation: system network routes traverse the passive interface.",
             }
 
         return {
@@ -307,7 +307,7 @@ class SystemService:
             "has_ip": False,
             "has_routes": False,
             "is_promiscuous": is_promisc,
-            "details": "Conformité validée : mode furtif actif, aucune adresse IP ni route assignée.",
+            "details": "Isolation compliance verified: stealth mode active, no IP address or route assigned.",
         }
 
     @classmethod
@@ -338,7 +338,7 @@ class SystemService:
 
             if not has_systemctl:
                 unit_info["status"] = "UNKNOWN"
-                unit_info["description"] = "systemctl non disponible dans cet environnement d'exécution"
+                unit_info["description"] = "systemctl unavailable in this runtime environment"
                 results.append(unit_info)
                 continue
 
@@ -358,7 +358,7 @@ class SystemService:
 
                 if cmd.returncode != 0:
                     unit_info["status"] = "UNKNOWN"
-                    unit_info["description"] = "Échec d'interrogation systemctl"
+                    unit_info["description"] = "systemctl query failed"
                     results.append(unit_info)
                     continue
 
@@ -404,10 +404,10 @@ class SystemService:
 
             except subprocess.TimeoutExpired:
                 unit_info["status"] = "UNKNOWN"
-                unit_info["description"] = "Délai d'attente dépassé lors de l'appel systemctl"
+                unit_info["description"] = "systemctl call timed out"
             except Exception as e:
                 unit_info["status"] = "UNKNOWN"
-                unit_info["description"] = f"Erreur de supervision : {e}"
+                unit_info["description"] = f"Monitoring error: {e}"
 
             results.append(unit_info)
 
@@ -416,16 +416,16 @@ class SystemService:
     @classmethod
     def get_real_storage_metrics(cls) -> Dict[str, Any]:
         """
-        Mesures réelles du stockage en séparant rigoureusement l'occupation globale du disque
-        de l'occupation dédiée du répertoire PCAP (/var/lib/openndr/captures).
-        Protection contre les traversées de répertoire ('..').
+        Real storage metrics strictly separating overall disk usage
+        from the dedicated PCAP directory (/var/lib/openndr/captures).
+        Protected against directory traversal ('..').
         """
         pcap_raw = settings.PCAP_STORAGE_PATH
 
-        # Sécurité : validation et normalisation stricte du chemin
+        # Security: strict path validation and normalization
         norm_path = os.path.normpath(pcap_raw)
         if ".." in norm_path.split(os.sep):
-            raise ValueError("Tentative de traversée de répertoire non autorisée dans le chemin PCAP.")
+            raise ValueError("Unauthorized directory traversal attempt in PCAP path.")
 
         real_pcap_dir = os.path.realpath(norm_path)
 
@@ -537,7 +537,7 @@ class SystemService:
                 },
                 "last_capture_file": None,
                 "recent_packets": [],
-                "socket_error": f"Socket IPC {socket_path} non disponible (moteur arrêté)",
+                "socket_error": f"IPC socket {socket_path} unavailable (engine stopped)",
             }
 
         try:
@@ -577,26 +577,26 @@ class SystemService:
     @classmethod
     def ingest_pcap_file(cls, filepath: str) -> Dict[str, Any]:
         """
-        Ingère et décode une trace PCAP ou PCAPNG via le démon IPC (si actif) ou le binaire openndr-engine.
+        Ingests and decodes a PCAP or PCAPNG trace via the IPC daemon (if running) or openndr-engine binary.
         """
         import json
 
         if not filepath or not isinstance(filepath, str):
-            raise ValueError("Chemin de fichier PCAP invalide.")
+            raise ValueError("Invalid PCAP file path.")
 
         norm_path = os.path.normpath(filepath.strip())
         if ".." in norm_path.split(os.sep):
-            raise ValueError("Traversée de répertoire interdite dans le chemin PCAP.")
+            raise ValueError("Directory traversal forbidden in PCAP path.")
 
         real_path = os.path.realpath(norm_path)
         if not os.path.isfile(real_path):
-            raise FileNotFoundError(f"Fichier de trace introuvable : {filepath}")
+            raise FileNotFoundError(f"Trace file not found: {filepath}")
 
         ext = os.path.splitext(real_path)[1].lower()
         if ext not in {".pcap", ".pcapng", ".cap"}:
-            raise ValueError("Extension non supportée (attendu .pcap, .pcapng ou .cap).")
+            raise ValueError("Unsupported file extension (expected .pcap, .pcapng, or .cap).")
 
-        # Préférer l'IPC du démon actif afin de mettre à jour la télémétrie en mémoire
+        # Prefer active daemon IPC to update in-memory telemetry
         if os.path.exists(settings.ENGINE_SOCKET_PATH):
             ipc_res = cls.send_engine_ipc_command(f"INGEST_PCAP {real_path}")
             if isinstance(ipc_res, dict) and "packets_processed" in ipc_res:
@@ -604,7 +604,7 @@ class SystemService:
 
         chosen_bin = cls._find_engine_binary()
         if not chosen_bin:
-            raise RuntimeError("Binaire openndr-engine introuvable pour l'analyse PCAP")
+            raise RuntimeError("openndr-engine binary not found for PCAP analysis")
 
         proc = subprocess.run(
             [chosen_bin, "--ingest", real_path],
@@ -615,31 +615,31 @@ class SystemService:
             shell=False,
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"Erreur openndr-engine lors de l'ingestion : {proc.stderr}")
+            raise RuntimeError(f"openndr-engine ingestion error: {proc.stderr}")
 
         raw_stdout = proc.stdout.strip()
         json_start = raw_stdout.find("{")
         if json_start != -1:
             json_str = raw_stdout[json_start:]
             return json.loads(json_str)
-        raise RuntimeError(f"Sortie inattendue du moteur : {raw_stdout}")
+        raise RuntimeError(f"Unexpected engine output: {raw_stdout}")
 
     @classmethod
     def ingest_pcap_bytes(cls, filename: str, raw_bytes: bytes) -> Dict[str, Any]:
         """
-        Ingère une trace PCAP/PCAPNG transmise par le navigateur via un fichier temporaire sécurisé.
+        Ingests a PCAP/PCAPNG trace uploaded by the browser using a secure temporary file.
         """
         import tempfile
 
         if not raw_bytes:
-            raise ValueError("Fichier PCAP vide.")
+            raise ValueError("Empty PCAP file.")
         if len(raw_bytes) > 64 * 1024 * 1024:
-            raise ValueError("Taille maximale de trace dépassée (64 Mo max).")
+            raise ValueError("Maximum trace size exceeded (64 MB max).")
 
         safe_name = os.path.basename(filename or "upload.pcap")
         ext = os.path.splitext(safe_name)[1].lower()
         if ext not in {".pcap", ".pcapng", ".cap"}:
-            raise ValueError("Format invalide : seuls les fichiers .pcap, .pcapng et .cap sont acceptés.")
+            raise ValueError("Invalid format: only .pcap, .pcapng, and .cap files are accepted.")
 
         tmp_path: Optional[str] = None
         try:

@@ -122,9 +122,9 @@ export default function App() {
     try {
       await apiService.login(email, pass);
       await refreshData();
-      showToast('success', 'Authentification SOC réussie');
+      showToast('success', 'SOC authentication succeeded');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erreur d'authentification";
+      const msg = err instanceof Error ? err.message : 'Authentication error';
       showToast('error', msg);
       throw err;
     }
@@ -134,9 +134,9 @@ export default function App() {
     try {
       await apiService.logout();
       await refreshData();
-      showToast('success', 'Session déconnectée et jeton JWT révoqué');
+      showToast('success', 'Session signed out and JWT token revoked');
     } catch {
-      showToast('success', 'Déconnexion effectuée');
+      showToast('success', 'Signed out');
     }
   };
 
@@ -144,7 +144,7 @@ export default function App() {
     try {
       await apiService.toggleUserActive(userId);
       await refreshData();
-      showToast('success', 'Statut du compte utilisateur mis à jour');
+      showToast('success', 'User account status updated');
     } catch (err: unknown) {
       if (err instanceof Error) showToast('error', err.message);
     }
@@ -164,10 +164,10 @@ export default function App() {
         password: data.password,
       });
       await refreshData();
-      showToast('success', `Compte ${data.email} créé avec succès`);
+      showToast('success', `Account ${data.email} created successfully`);
       return res;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur de création de compte';
+      const msg = err instanceof Error ? err.message : 'Error creating account';
       showToast('error', msg);
       throw err;
     }
@@ -265,7 +265,7 @@ export default function App() {
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            OpenNDR v0.2.0 · Moteur Réseau Autonome sous licence AGPL-3.0
+            OpenNDR v0.2.0 · Autonomous Network Engine licensed under AGPL-3.0
           </div>
           <div className="flex items-center gap-4 text-slate-400">
             <span>Debian 13 (Trixie)</span>

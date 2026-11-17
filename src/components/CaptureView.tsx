@@ -32,18 +32,18 @@ const EMPTY_PROTOCOL_STATS: ProtocolStats = {
 };
 
 function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 o';
-  if (bytes < 1024) return `${bytes} o`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} Mo`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} Go`;
+  if (!bytes || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function formatTimestampUs(us: number): string {
   if (!us || us <= 0) return '-';
   const date = new Date(Math.floor(us / 1000));
   const msPart = String(Math.floor((us % 1000000) / 1000)).padStart(3, '0');
-  return `${date.toLocaleTimeString('fr-FR', { hour12: false })}.${msPart}`;
+  return `${date.toLocaleTimeString('en-US', { hour12: false })}.${msPart}`;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -76,7 +76,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
   const captureMode = telemetry?.capture_mode || 'STANDBY';
   const stats = telemetry?.protocol_stats || EMPTY_PROTOCOL_STATS;
 
-  // Fusionne les paquets de la dernière trace ingérée et les paquets temps réel du moteur
+  // Merge packets from the latest ingested trace and live engine telemetry
   const displayedPackets: PacketSummary[] = useMemo(() => {
     if (lastIngestion?.packet_summaries && lastIngestion.packet_summaries.length > 0) {
       return lastIngestion.packet_summaries;
@@ -118,7 +118,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
     { label: 'UDP', count: stats.udp_packets, barClass: 'bg-emerald-500' },
     { label: 'ICMP (v4/v6)', count: stats.icmp_packets, barClass: 'bg-amber-500' },
     { label: 'ARP', count: stats.arp_packets, barClass: 'bg-violet-500' },
-    { label: 'Autres L2/L3', count: stats.other_packets, barClass: 'bg-slate-500' },
+    { label: 'Other L2/L3', count: stats.other_packets, barClass: 'bg-slate-500' },
   ];
 
   const handleToggleCapture = async () => {
@@ -128,14 +128,14 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
     try {
       if (isRunning) {
         const res = await apiService.stopCapture();
-        onNotify('success', res.message || 'Capture passive arrêtée');
+        onNotify('success', res.message || 'Passive capture stopped');
       } else {
         const res = await apiService.startCapture();
-        onNotify('success', res.message || 'Capture passive AF_PACKET démarrée');
+        onNotify('success', res.message || 'AF_PACKET passive capture started');
       }
       await onRefreshTelemetry();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur de commande moteur';
+      const msg = err instanceof Error ? err.message : 'Engine command error';
       setErrorDetail(msg);
       onNotify('error', msg);
     } finally {
@@ -151,10 +151,10 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
     try {
       const res = await apiService.ingestPcap(serverPathInput.trim());
       setLastIngestion(res);
-      onNotify('success', `${res.packets_processed} paquet(s) décodé(s) depuis ${res.file_path}`);
+      onNotify('success', `${res.packets_processed} packet(s) decoded from ${res.file_path}`);
       await onRefreshTelemetry();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Échec de l'ingestion PCAP";
+      const msg = err instanceof Error ? err.message : 'PCAP ingestion failed';
       setErrorDetail(msg);
       onNotify('error', msg);
     } finally {
@@ -172,10 +172,10 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
       const base64 = arrayBufferToBase64(buffer);
       const res = await apiService.uploadPcap(file.name, base64);
       setLastIngestion(res);
-      onNotify('success', `Trace ${file.name} analysée (${res.packets_processed} paquets)`);
+      onNotify('success', `Trace ${file.name} analyzed (${res.packets_processed} packets)`);
       await onRefreshTelemetry();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erreur lors de l'analyse du fichier PCAP";
+      const msg = err instanceof Error ? err.message : 'Error analyzing PCAP file';
       setErrorDetail(msg);
       onNotify('error', msg);
     } finally {
@@ -186,13 +186,13 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* En-tête de contrôle Capture Engine V0.2 */}
+      {/* Capture Engine V0.2 Control Header */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-slate-100">
-                Moteur de Capture Passive & Décodage L2–L4
+                Passive Capture Engine & L2–L4 Decoding
               </h2>
               <span className="text-xs text-slate-500">·</span>
               <span className="text-xs font-mono text-slate-300">
@@ -200,18 +200,18 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
               </span>
               <span className="text-xs text-slate-500">·</span>
               <span className={`text-xs font-mono font-medium ${isRunning ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {isRunning ? `ACTIF (${captureMode})` : 'EN VEILLE (STANDBY)'}
+                {isRunning ? `ACTIVE (${captureMode})` : 'STANDBY'}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-              <span>Interface : {telemetry?.active_interface || 'eth1 (passive)'}</span>
+              <span>Interface: {telemetry?.active_interface || 'eth1 (passive)'}</span>
               <span aria-hidden="true">·</span>
-              <span>Pipeline : Ethernet II / 802.1Q / IPv4 / IPv6 / ARP / ICMP / TCP / UDP</span>
+              <span>Pipeline: Ethernet II / 802.1Q / IPv4 / IPv6 / ARP / ICMP / TCP / UDP</span>
               {telemetry?.last_capture_file && (
                 <>
                   <span aria-hidden="true">·</span>
                   <span className="font-mono text-slate-300 truncate max-w-md" title={telemetry.last_capture_file}>
-                    Dernier fichier : {telemetry.last_capture_file}
+                    Last file: {telemetry.last_capture_file}
                   </span>
                 </>
               )}
@@ -224,7 +224,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
               className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              Actualiser
+              Refresh
             </button>
 
             {canManageCapture && (
@@ -240,12 +240,12 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                 {isRunning ? (
                   <>
                     <Square className="w-3.5 h-3.5" />
-                    Arrêter capture
+                    Stop capture
                   </>
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5" />
-                    Démarrer capture
+                    Start capture
                   </>
                 )}
               </button>
@@ -261,65 +261,65 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
         )}
       </div>
 
-      {/* KPIs temps réel (valeurs strictement réelles, tabular-nums) */}
+      {/* Real-time KPIs (strictly real values, tabular-nums) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Débit instantané</div>
+          <div className="text-xs text-slate-400 mb-1">Instant Throughput</div>
           <div className="text-xl font-bold font-mono tabular-nums text-slate-100">
             {(telemetry?.current_mbps ?? 0).toFixed(3)} Mbps
           </div>
           <div className="mt-1.5 text-xs text-slate-500">
-            Mesure fenêtre glissante 1s
+            1s sliding window measurement
           </div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Paquets capturés / Pertes</div>
+          <div className="text-xs text-slate-400 mb-1">Captured Packets / Drops</div>
           <div className="text-xl font-bold font-mono tabular-nums text-emerald-400">
-            {(telemetry?.packets_received ?? 0).toLocaleString('fr-FR')}
+            {(telemetry?.packets_received ?? 0).toLocaleString('en-US')}
             <span className="text-slate-500 text-sm font-normal">
               {' / '}
-              {(telemetry?.packets_dropped ?? 0).toLocaleString('fr-FR')} drop
+              {(telemetry?.packets_dropped ?? 0).toLocaleString('en-US')} drop
             </span>
           </div>
           <div className="mt-1.5 text-xs text-slate-500">
-            Compteur noyau PACKET_STATISTICS
+            Kernel PACKET_STATISTICS counter
           </div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Volume de trames traité</div>
+          <div className="text-xs text-slate-400 mb-1">Processed Frame Volume</div>
           <div className="text-xl font-bold font-mono tabular-nums text-slate-100">
             {formatBytes(telemetry?.bytes_processed ?? 0)}
           </div>
           <div className="mt-1.5 text-xs text-slate-500">
-            Stockage PCAP rotatif local
+            Local rotating PCAP storage
           </div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <div className="text-xs text-slate-400 mb-1">Saturation Ring Buffer</div>
+          <div className="text-xs text-slate-400 mb-1">Ring Buffer Saturation</div>
           <div className="text-xl font-bold font-mono tabular-nums text-sky-400">
             {(telemetry?.ring_buffer_usage_pct ?? 0).toFixed(1)} %
           </div>
           <div className="mt-1.5 text-xs text-slate-500">
-            Anneau mmap zero-copy TPACKET_V2
+            Zero-copy TPACKET_V2 mmap ring
           </div>
         </div>
       </div>
 
-      {/* Répartition protocolaire L2-L4 & Ingestion PCAP/PCAPNG */}
+      {/* L2-L4 Protocol Breakdown & PCAP/PCAPNG Ingestion */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        {/* Répartition L2-L4 */}
+        {/* L2-L4 Breakdown */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">Répartition Protocolaire L2–L4</h3>
+            <h3 className="text-sm font-semibold text-slate-100">L2–L4 Protocol Breakdown</h3>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1 font-mono tabular-nums">
-              <span>IPv4 : {stats.ipv4_packets.toLocaleString('fr-FR')}</span>
+              <span>IPv4: {stats.ipv4_packets.toLocaleString('en-US')}</span>
               <span aria-hidden="true">·</span>
-              <span>IPv6 : {stats.ipv6_packets.toLocaleString('fr-FR')}</span>
+              <span>IPv6: {stats.ipv6_packets.toLocaleString('en-US')}</span>
               <span aria-hidden="true">·</span>
-              <span>VLAN 802.1Q : {stats.vlan_packets.toLocaleString('fr-FR')}</span>
+              <span>VLAN 802.1Q: {stats.vlan_packets.toLocaleString('en-US')}</span>
             </div>
           </div>
 
@@ -333,7 +333,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-300 font-medium">{row.label}</span>
                     <span className="font-mono tabular-nums text-slate-400">
-                      {row.count.toLocaleString('fr-FR')} ({pct} %)
+                      {row.count.toLocaleString('en-US')} ({pct}%)
                     </span>
                   </div>
                   <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -345,17 +345,17 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
           </div>
         </div>
 
-        {/* Ingestion & Analyse de fichiers PCAP / PCAPNG */}
+        {/* PCAP / PCAPNG File Ingestion & Analysis */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">Ingestion & Décodage de Traces PCAP / PCAPNG</h3>
+            <h3 className="text-sm font-semibold text-slate-100">PCAP / PCAPNG Trace Ingestion & Decoding</h3>
             <p className="text-xs text-slate-400 mt-1">
-              Chargez un fichier réseau local ou indiquez un chemin serveur pour exécuter le parseur Rust L2–L4.
+              Upload a local network capture file or specify a server path to run the Rust L2–L4 parser.
             </p>
           </div>
 
           <div className="space-y-3">
-            {/* Upload direct fichier PCAP/PCAPNG */}
+            {/* Direct PCAP/PCAPNG file upload */}
             <div>
               <input
                 ref={fileInputRef}
@@ -377,15 +377,15 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                 <Upload className="w-4 h-4 shrink-0" />
                 <span>
                   {isIngesting
-                    ? 'Analyse Rust L2–L4 en cours...'
+                    ? 'Running Rust L2–L4 analysis...'
                     : canManageCapture
-                    ? 'Importer une trace .pcap ou .pcapng'
-                    : 'Permission interfaces:manage requise pour ingérer une trace'}
+                    ? 'Upload a .pcap or .pcapng trace'
+                    : 'interfaces:manage permission required to ingest a trace'}
                 </span>
               </label>
             </div>
 
-            {/* Ingestion par chemin serveur */}
+            {/* Ingestion via server file path */}
             <form onSubmit={handleIngestServerFile} className="flex items-center gap-2">
               <div className="relative flex-1">
                 <FolderOpen className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -403,7 +403,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                 disabled={!canManageCapture || isIngesting || !serverPathInput.trim()}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-100 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0"
               >
-                Analyser chemin
+                Analyze path
               </button>
             </form>
           </div>
@@ -416,30 +416,30 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                   <span className="truncate">{lastIngestion.file_path}</span>
                 </span>
                 <span className="font-mono tabular-nums shrink-0 ml-2">
-                  {lastIngestion.packets_processed} paquets
+                  {lastIngestion.packets_processed} packets
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-slate-400 font-mono tabular-nums">
-                <span>Taille : {formatBytes(lastIngestion.file_size_bytes)}</span>
+                <span>Size: {formatBytes(lastIngestion.file_size_bytes)}</span>
                 <span aria-hidden="true">·</span>
-                <span>Charge utile : {formatBytes(lastIngestion.bytes_processed)}</span>
+                <span>Payload: {formatBytes(lastIngestion.bytes_processed)}</span>
                 <span aria-hidden="true">·</span>
-                <span>Durée trace : {lastIngestion.duration_seconds.toFixed(3)} s</span>
+                <span>Trace duration: {lastIngestion.duration_seconds.toFixed(3)} s</span>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Inspecteur de paquets décodés L2-L4 */}
+      {/* Decoded L2-L4 Packet Inspector */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-100">
-              Inspecteur de Trames Décodées L2–L4
+              Decoded L2–L4 Frame Inspector
             </h3>
             <p className="text-xs text-slate-400">
-              Affichage des {filteredPackets.length} trame(s) extraite(s) par le décodeur Rust
+              Showing {filteredPackets.length} frame(s) extracted by the Rust decoder
             </p>
           </div>
 
@@ -455,7 +455,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {proto === 'ALL' ? 'Tous' : proto}
+                  {proto === 'ALL' ? 'All' : proto}
                 </button>
               ))}
             </div>
@@ -466,7 +466,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filtrer IP, MAC, port..."
+                placeholder="Filter IP, MAC, port..."
                 className="pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
               />
             </div>
@@ -477,10 +477,10 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
           <div className="py-12 text-center border border-dashed border-slate-800 rounded-lg space-y-2">
             <Layers className="w-6 h-6 text-slate-500 mx-auto" />
             <div className="text-xs font-medium text-slate-300">
-              Aucune trame décodée à afficher
+              No decoded frames to display
             </div>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              OpenNDR n’injecte aucun trafic simulé. Importez un fichier .pcap/.pcapng ou démarrez la capture passive sur l’interface d’écoute.
+              OpenNDR never injects simulated traffic. Upload a .pcap/.pcapng file or start passive capture on the listening interface.
             </p>
           </div>
         ) : (
@@ -488,14 +488,14 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/70 text-xs text-slate-400">
-                  <th className="py-2.5 px-3 font-medium">Horodatage</th>
-                  <th className="py-2.5 px-3 font-medium">Protocole</th>
+                  <th className="py-2.5 px-3 font-medium">Timestamp</th>
+                  <th className="py-2.5 px-3 font-medium">Protocol</th>
                   <th className="py-2.5 px-3 font-medium">VLAN</th>
                   <th className="py-2.5 px-3 font-medium">Source</th>
                   <th className="py-2.5 px-3 font-medium">Destination</th>
                   <th className="py-2.5 px-3 font-medium">Flags</th>
-                  <th className="py-2.5 px-3 font-medium text-right">Taille</th>
-                  <th className="py-2.5 px-3 font-medium">Détail L2–L4</th>
+                  <th className="py-2.5 px-3 font-medium text-right">Length</th>
+                  <th className="py-2.5 px-3 font-medium">L2–L4 Detail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/70 text-xs font-mono tabular-nums">
@@ -531,7 +531,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                         {pkt.tcp_flags || '-'}
                       </td>
                       <td className="py-2 px-3 text-slate-300 text-right whitespace-nowrap">
-                        {pkt.raw_len} o
+                        {pkt.raw_len} B
                       </td>
                       <td className="py-2 px-3 text-slate-400 font-sans max-w-xs truncate" title={pkt.info}>
                         {pkt.info}

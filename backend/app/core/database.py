@@ -49,7 +49,7 @@ def check_database_connection() -> Tuple[bool, str]:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-        return True, "Connecté et opérationnel"
+        return True, "Connected and operational"
     except Exception as exc:
-        logger.warning(f"Échec du test de connexion à la base de données : {exc}")
+        logger.warning(f"Database connection test failed: {exc}")
         return False, str(exc)

@@ -44,15 +44,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-100">Plateforme OpenNDR — Version V0.2</span>
+              <span className="text-sm font-semibold text-slate-100">OpenNDR Platform — Version V0.2</span>
               <span className="text-xs text-slate-500">·</span>
               <span className="text-xs text-emerald-400 font-medium">
-                {isCaptureRunning ? 'Capture Passive & Décodage L2–L4 Actifs' : 'Moteur Réseau L2–L4 Opérationnel'}
+                {isCaptureRunning ? 'Passive Capture & L2–L4 Decoding Active' : 'L2–L4 Network Engine Operational'}
               </span>
             </div>
             <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
-              Sonde de détection et réponse réseau autonome pour Debian 13.
-              Capture passive AF_PACKET (PACKET_MMAP), ingestion PCAP/PCAPNG, décodage hiérarchique L2–L4 et stockage PCAP rotatif local.
+              Autonomous Network Detection and Response sensor for Debian 13.
+              AF_PACKET (PACKET_MMAP) passive capture, PCAP/PCAPNG ingestion, hierarchical L2–L4 decoding, and rotating local PCAP storage.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -70,7 +70,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap shrink-0"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              Lancer la Recette
+              Run Validation
             </button>
           </div>
         </div>
@@ -81,14 +81,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
               <span>
-                <strong>ALERTE CRITIQUE DE SÉCURITÉ :</strong> L’interface de capture passive présente une violation d’isolation (IP assignée).
+                <strong>CRITICAL SECURITY ALERT:</strong> The passive capture interface has an isolation violation (IP assigned).
               </span>
             </div>
             <button
               onClick={onNavigateToInterfaces}
               className="text-xs underline hover:text-white shrink-0 font-medium"
             >
-              Inspecter l’interface
+              Inspect interface
             </button>
           </div>
         )}
@@ -99,14 +99,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 1: Capture Engine Status */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Moteur Réseau Rust V0.2</span>
+            <span>Rust Network Engine V0.2</span>
             <Radio className={`w-4 h-4 ${isCaptureRunning ? 'text-emerald-400' : 'text-amber-400'}`} />
           </div>
           <div className={`text-lg font-bold tracking-tight font-mono ${isCaptureRunning ? 'text-emerald-400' : 'text-amber-400'}`}>
-            {isCaptureRunning ? `ACTIF (${telemetry?.capture_mode || 'AF_PACKET'})` : 'STANDBY (V0.2)'}
+            {isCaptureRunning ? `ACTIVE (${telemetry?.capture_mode || 'AF_PACKET'})` : 'STANDBY (V0.2)'}
           </div>
           <div className="mt-2 text-xs text-slate-400 font-mono tabular-nums">
-            Paquets décodés : <span className="text-slate-200">{packetsReceived.toLocaleString('fr-FR')}</span>
+            Decoded packets: <span className="text-slate-200">{packetsReceived.toLocaleString('en-US')}</span>
             {telemetry && telemetry.current_mbps > 0 ? ` · ${telemetry.current_mbps.toFixed(2)} Mbps` : ''}
           </div>
         </div>
@@ -114,42 +114,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 2: Stealth Compliance */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Conformité Furtive</span>
+            <span>Stealth Compliance</span>
             <Activity className="w-4 h-4 text-sky-400" />
           </div>
           <div className={`text-lg font-bold tracking-tight font-mono ${isPassiveCompliant ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {isPassiveCompliant ? '100% FURTIF' : 'VIOLATION DÉTECTÉE'}
+            {isPassiveCompliant ? '100% STEALTH' : 'VIOLATION DETECTED'}
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            Émission : <span className="font-mono text-slate-300">0 trame (Zéro IP)</span>
+            TX traffic: <span className="font-mono text-slate-300">0 frames (Zero IP)</span>
           </div>
         </div>
 
         {/* Card 3: Storage PCAP Quota */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Stockage PCAP Local</span>
+            <span>Local PCAP Storage</span>
             <HardDrive className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-lg font-bold text-slate-100 tracking-tight font-mono">
-            {storage ? `${storage.usedStorageGb} / ${storage.maxStorageGb} Go` : 'Quota Local'}
+            {storage ? `${storage.usedStorageGb} / ${storage.maxStorageGb} GB` : 'Local Quota'}
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            Rétention : <span className="text-slate-300">{storage ? `${storage.retentionDays} jours` : '30 jours'}</span> (Disque local)
+            Retention: <span className="text-slate-300">{storage ? `${storage.retentionDays} days` : '30 days'}</span> (Local disk)
           </div>
         </div>
 
         {/* Card 4: Platform Target */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Environnement Cible</span>
+            <span>Target Platform</span>
             <Cpu className="w-4 h-4 text-purple-400" />
           </div>
           <div className="text-lg font-bold text-slate-100 tracking-tight font-mono">
             Debian 13 (Trixie)
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            Architecture : <span className="text-slate-300 font-mono">systemd + PostgreSQL</span>
+            Architecture: <span className="text-slate-300 font-mono">systemd + PostgreSQL</span>
           </div>
         </div>
       </div>
@@ -158,8 +158,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">Supervision des Services OpenNDR</h3>
-            <p className="text-xs text-slate-400">État réel des unités système</p>
+            <h3 className="text-sm font-semibold text-slate-100">OpenNDR Services Supervision</h3>
+            <p className="text-xs text-slate-400">Real-time systemd unit states</p>
           </div>
           <span className="text-xs text-slate-400 font-mono">/etc/systemd/system/</span>
         </div>
@@ -209,27 +209,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Admin Interface */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-300">Interface d'Administration SOC</span>
+            <span className="text-xs font-semibold text-slate-300">SOC Administration Interface</span>
             <span className="text-xs font-mono text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/40">ADMIN</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Nom interface</span>
+            <span className="text-slate-400">Interface name</span>
             <span className="font-mono text-slate-200">{adminInterface?.name || 'eth0'}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Adresse IP assignée</span>
-            <span className="font-mono text-slate-200">{adminInterface?.ipAddress || 'Configurée pour gestion'}</span>
+            <span className="text-slate-400">Assigned IP address</span>
+            <span className="font-mono text-slate-200">{adminInterface?.ipAddress || 'Configured for management'}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Usage</span>
-            <span className="text-slate-300">Web HTTPS / API FastAPI</span>
+            <span className="text-slate-400">Purpose</span>
+            <span className="text-slate-300">Web HTTPS / FastAPI REST API</span>
           </div>
         </div>
 
         {/* Capture Interface */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-300">Interface de Capture Passive</span>
+            <span className="text-xs font-semibold text-slate-300">Passive Capture Interface</span>
             <span
               className={`text-xs font-mono px-2 py-0.5 rounded border ${
                 isPassiveCompliant
@@ -241,18 +241,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Nom interface</span>
+            <span className="text-slate-400">Interface name</span>
             <span className="font-mono text-slate-200">{passiveInterface?.name || 'eth1'}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Adresse IP assignée</span>
+            <span className="text-slate-400">Assigned IP address</span>
             <span className="font-mono text-slate-200">
-              {passiveInterface?.ipAddress || 'AUCUNE (Conforme furtif)'}
+              {passiveInterface?.ipAddress || 'NONE (Stealth compliant)'}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Mode d’écoute</span>
-            <span className="text-slate-300">Promiscuous strict (Raccord miroir SPAN)</span>
+            <span className="text-slate-400">Capture mode</span>
+            <span className="text-slate-300">Strict promiscuous (SPAN mirror link)</span>
           </div>
         </div>
       </div>

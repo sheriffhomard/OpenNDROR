@@ -50,14 +50,14 @@ export const RbacView: React.FC<RbacViewProps> = ({
     analyst: boolean;
     observer: boolean;
   }[] = [
-    { code: 'system:view', label: 'Consulter l’état système et les métriques', module: 'Système', admin: true, analyst: true, observer: true },
-    { code: 'system:manage', label: 'Gérer les services et redémarrer les démons', module: 'Système', admin: true, analyst: false, observer: false },
-    { code: 'interfaces:view', label: 'Consulter la configuration réseau', module: 'Réseau', admin: true, analyst: true, observer: true },
-    { code: 'interfaces:manage', label: 'Assigner et configurer les interfaces de capture', module: 'Réseau', admin: true, analyst: false, observer: false },
-    { code: 'users:view', label: 'Consulter l’annuaire des comptes et rôles', module: 'Utilisateurs', admin: true, analyst: true, observer: false },
-    { code: 'users:manage', label: 'Créer, éditer ou révoquer des accès', module: 'Utilisateurs', admin: true, analyst: false, observer: false },
-    { code: 'audit:view', label: 'Consulter le journal d’audit de sécurité', module: 'Audit', admin: true, analyst: true, observer: false },
-    { code: 'storage:manage', label: 'Modifier les politiques de rétention PCAP', module: 'Stockage', admin: true, analyst: false, observer: false },
+    { code: 'system:view', label: 'View system status and metrics', module: 'System', admin: true, analyst: true, observer: true },
+    { code: 'system:manage', label: 'Manage services and restart daemons', module: 'System', admin: true, analyst: false, observer: false },
+    { code: 'interfaces:view', label: 'View network configuration', module: 'Network', admin: true, analyst: true, observer: true },
+    { code: 'interfaces:manage', label: 'Assign and configure capture interfaces', module: 'Network', admin: true, analyst: false, observer: false },
+    { code: 'users:view', label: 'View user accounts and roles directory', module: 'Users', admin: true, analyst: true, observer: false },
+    { code: 'users:manage', label: 'Create, edit, or revoke accounts', module: 'Users', admin: true, analyst: false, observer: false },
+    { code: 'audit:view', label: 'View the security audit log', module: 'Audit', admin: true, analyst: true, observer: false },
+    { code: 'storage:manage', label: 'Modify PCAP retention policies', module: 'Storage', admin: true, analyst: false, observer: false },
   ];
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -65,7 +65,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
     setErrorMsg(null);
     try {
       if (!newEmail || !newFullName) {
-        throw new Error('Veuillez renseigner tous les champs obligatoires.');
+        throw new Error('Please fill in all required fields.');
       }
       const res = await onCreateUser({
         email: newEmail.trim(),
@@ -102,10 +102,10 @@ export const RbacView: React.FC<RbacViewProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100">Contrôle d'Accès Basé sur les Rôles (RBAC)</h2>
+            <h2 className="text-sm font-semibold text-slate-100">Role-Based Access Control (RBAC)</h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Séparation stricte des privilèges : Administrator, Analyst et Observer.
-              Toutes les permissions sont validées côté serveur PostgreSQL à chaque requête API.
+              Strict privilege separation: Administrator, Analyst, and Observer.
+              All permissions are enforced server-side in PostgreSQL on every API request.
             </p>
           </div>
           {canManageUsers && (
@@ -114,7 +114,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              Créer un Compte
+              Create Account
             </button>
           )}
         </div>
@@ -124,7 +124,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
       {createdCredentials && (
         <div className="p-4 bg-emerald-950/70 border border-emerald-500/50 rounded-xl space-y-2 text-xs">
           <div className="flex items-center justify-between text-emerald-300 font-semibold">
-            <span>Compte créé avec succès dans PostgreSQL !</span>
+            <span>Account successfully created in PostgreSQL!</span>
             <button
               onClick={() => setCreatedCredentials(null)}
               className="text-slate-400 hover:text-slate-200"
@@ -133,16 +133,16 @@ export const RbacView: React.FC<RbacViewProps> = ({
             </button>
           </div>
           <p className="text-slate-300">
-            Un mot de passe temporaire unique a été généré pour{' '}
+            A one-time temporary password has been generated for{' '}
             <strong className="text-white font-mono">{createdCredentials.email}</strong>.
-            Ce mot de passe ne sera plus jamais réaffiché :
+            This password will never be shown again:
           </p>
           <div className="flex items-center gap-2 p-2 bg-slate-900 border border-slate-800 rounded font-mono text-emerald-400">
             <span className="flex-1 font-semibold select-all">{createdCredentials.tempPass}</span>
             <button
               onClick={() => copyToClipboard(createdCredentials.tempPass)}
               className="p-1 text-slate-400 hover:text-slate-200 rounded"
-              title="Copier le mot de passe"
+              title="Copy password"
             >
               {copied ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
@@ -155,19 +155,19 @@ export const RbacView: React.FC<RbacViewProps> = ({
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-xs font-semibold text-slate-200">Annuaire des Utilisateurs de la Sonde</h3>
+            <h3 className="text-xs font-semibold text-slate-200">Sensor User Directory</h3>
           </div>
-          <span className="text-xs text-slate-400 font-mono">{users.length} comptes réels</span>
+          <span className="text-xs text-slate-400 font-mono">{users.length} active records</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
               <tr>
-                <th className="px-4 py-3 font-medium">Nom & Identifiant</th>
-                <th className="px-4 py-3 font-medium">Rôle Attribué</th>
-                <th className="px-4 py-3 font-medium">Dernière Connexion</th>
-                <th className="px-4 py-3 font-medium">Statut</th>
+                <th className="px-4 py-3 font-medium">Name & Identifier</th>
+                <th className="px-4 py-3 font-medium">Assigned Role</th>
+                <th className="px-4 py-3 font-medium">Last Login</th>
+                <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -193,7 +193,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
                     </span>
                   </td>
                   <td className="px-4 py-3 font-mono text-slate-400">
-                    {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString('fr-FR') : 'Jamais'}
+                    {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString('en-US') : 'Never'}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -203,7 +203,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
                           : 'text-slate-400 bg-slate-800'
                       }`}
                     >
-                      {user.isActive ? 'Actif' : 'Désactivé'}
+                      {user.isActive ? 'Active' : 'Disabled'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -212,7 +212,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
                         onClick={() => onToggleUserActive(user.id)}
                         className="text-xs text-slate-400 hover:text-slate-200 underline font-medium"
                       >
-                        {user.isActive ? 'Désactiver' : 'Réactiver'}
+                        {user.isActive ? 'Disable' : 'Re-enable'}
                       </button>
                     ) : (
                       <span className="text-slate-600 text-xs">—</span>
@@ -228,9 +228,9 @@ export const RbacView: React.FC<RbacViewProps> = ({
       {/* Permissions Matrix */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
         <div className="p-4 border-b border-slate-800">
-          <h3 className="text-xs font-semibold text-slate-200">Matrice Officielle des Privilèges RBAC</h3>
+          <h3 className="text-xs font-semibold text-slate-200">Official RBAC Privileges Matrix</h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Droit d'accès par rôle conformément aux exigences de sécurité du cahier des charges
+            Access rights per role according to platform security specifications
           </p>
         </div>
 
@@ -238,7 +238,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
               <tr>
-                <th className="px-4 py-3 font-medium">Code Permission</th>
+                <th className="px-4 py-3 font-medium">Permission Code</th>
                 <th className="px-4 py-3 font-medium">Module</th>
                 <th className="px-4 py-3 font-medium">Description</th>
                 <th className="px-4 py-3 font-medium text-center">Administrator</th>
@@ -287,7 +287,7 @@ export const RbacView: React.FC<RbacViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-emerald-400" />
-                Nouveau Compte Utilisateur
+                New User Account
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -306,11 +306,11 @@ export const RbacView: React.FC<RbacViewProps> = ({
 
             <form onSubmit={handleCreate} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Adresse E-mail</label>
+                <label className="block text-slate-300 mb-1 font-medium">Email Address</label>
                 <input
                   type="text"
                   required
-                  placeholder="analyste@openndr.local"
+                  placeholder="analyst@openndr.local"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
@@ -318,11 +318,11 @@ export const RbacView: React.FC<RbacViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Nom complet</label>
+                <label className="block text-slate-300 mb-1 font-medium">Full Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Jean Dupont (SOC Analyst)"
+                  placeholder="e.g. Jane Doe (SOC Analyst)"
                   value={newFullName}
                   onChange={(e) => setNewFullName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 text-xs"
@@ -330,25 +330,25 @@ export const RbacView: React.FC<RbacViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Rôle et Niveau de Privilège</label>
+                <label className="block text-slate-300 mb-1 font-medium">Role & Privilege Level</label>
                 <select
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as UserRole)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
                 >
-                  <option value="Administrator">Administrator (Gestion intégrale)</option>
+                  <option value="Administrator">Administrator (Full management)</option>
                   <option value="Analyst">Analyst (Investigation & Audit)</option>
-                  <option value="Observer">Observer (Lecture seule)</option>
+                  <option value="Observer">Observer (Read-only)</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-slate-300 mb-1 font-medium">
-                  Mot de passe (optionnel - généré aléatoirement si vide)
+                  Password (optional - randomly generated if blank)
                 </label>
                 <input
                   type="password"
-                  placeholder="Min. 12 car, maj, min, chif, spec"
+                  placeholder="Min. 12 chars, upper, lower, digit, special"
                   value={customPassword}
                   onChange={(e) => setCustomPassword(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
@@ -358,8 +358,8 @@ export const RbacView: React.FC<RbacViewProps> = ({
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 flex items-start gap-2">
                 <Lock className="w-3.5 h-3.5 mt-0.5 text-emerald-400 shrink-0" />
                 <span>
-                  Hachage cryptographique Argon2id conforme. Si laissé vide, un mot de passe temporaire robuste
-                  sera généré et affiché une seule fois.
+                  Compliant Argon2id cryptographic hashing. If left blank, a strong temporary password
+                  will be generated and displayed once.
                 </span>
               </div>
 
@@ -369,13 +369,13 @@ export const RbacView: React.FC<RbacViewProps> = ({
                   onClick={() => setIsModalOpen(false)}
                   className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
                 >
-                  Annuler
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors shadow-sm"
                 >
-                  Créer l'utilisateur
+                  Create user
                 </button>
               </div>
             </form>

@@ -41,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-xs text-slate-400 font-mono">v0.2.0</span>
             </div>
             <div className="text-xs text-slate-400">
-              Sonde NDR souveraine · Debian 13 (Trixie)
+              Sovereign NDR Sensor · Debian 13 (Trixie)
             </div>
           </div>
         </div>
@@ -68,11 +68,11 @@ export const Header: React.FC<HeaderProps> = ({
               {/* Real Logout button */}
               <button
                 onClick={onLogout}
-                title="Déconnexion sécurisée (invalidation du JWT)"
+                title="Secure sign out (JWT token revocation)"
                 className="flex items-center gap-1.5 px-2.5 py-1 text-slate-400 hover:text-rose-400 hover:bg-slate-900 rounded-lg transition-colors border border-slate-800 hover:border-rose-900/50 text-xs"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>Déconnexion</span>
+                <span>Sign Out</span>
               </button>
             </div>
           ) : (
@@ -81,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
             >
               <UserCheck className="w-4 h-4" />
-              Connexion SOC
+              SOC Sign In
             </button>
           )}
         </div>

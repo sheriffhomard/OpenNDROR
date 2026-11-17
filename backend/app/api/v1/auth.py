@@ -56,7 +56,7 @@ def logout(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Jeton d'autorisation manquant pour la déconnexion.",
+            detail="Missing authorization token for sign-out.",
         )
 
     token = authorization.split(" ")[1]
@@ -65,12 +65,12 @@ def logout(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Échec de la révocation du jeton (jeton invalide ou impossible à révoquer).",
+                detail="Token revocation failed (invalid token or unable to revoke).",
             )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Échec de persistance de la révocation en base de données. Déconnexion non garantie.",
+            detail="Failed to persist token revocation in database. Sign-out not guaranteed.",
         )
 
     ip_addr = get_client_ip(request)
@@ -84,7 +84,7 @@ def logout(
         user_id=current_user.id,
         ip_address=ip_addr,
     )
-    return {"message": "Déconnexion réussie"}
+    return {"message": "Signed out successfully"}
 
 
 @router.get("/me", response_model=UserOut)
@@ -118,4 +118,4 @@ def change_password(
         new_password=req.new_password,
         ip_address=ip_addr,
     )
-    return {"message": "Mot de passe modifié avec succès"}
+    return {"message": "Password changed successfully"}

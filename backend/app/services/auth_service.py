@@ -40,11 +40,11 @@ class AuthService:
                 status="FAILURE",
                 user_email=email,
                 ip_address=ip_address,
-                details={"reason": "Compte introuvable"},
+                details={"reason": "Account not found"},
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Identifiants d'accès invalides.",
+                detail="Invalid credentials.",
             )
 
         if not user.is_active:
@@ -57,11 +57,11 @@ class AuthService:
                 user_email=user.email,
                 user_id=user.id,
                 ip_address=ip_address,
-                details={"reason": "Compte désactivé"},
+                details={"reason": "Account disabled"},
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Compte utilisateur désactivé. Contactez l'administrateur.",
+                detail="User account disabled. Please contact your administrator.",
             )
 
         is_valid, needs_rehash = verify_password(password, user.hashed_password)
@@ -75,11 +75,11 @@ class AuthService:
                 user_email=user.email,
                 user_id=user.id,
                 ip_address=ip_address,
-                details={"reason": "Mot de passe incorrect"},
+                details={"reason": "Incorrect password"},
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Identifiants d'accès invalides.",
+                detail="Invalid credentials.",
             )
 
         # Migration transparente vers Argon2id si nécessaire
@@ -122,14 +122,14 @@ class AuthService:
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Le mot de passe actuel est incorrect.",
+                detail="Current password is incorrect.",
             )
 
         is_strong, err_msg = validate_password_strength(new_password)
         if not is_strong:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Nouveau mot de passe non conforme : {err_msg}",
+                detail=f"Non-compliant new password: {err_msg}",
             )
 
         user.hashed_password = hash_password(new_password)

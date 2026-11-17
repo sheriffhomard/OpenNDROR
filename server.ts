@@ -126,7 +126,7 @@ const usersStore: UserRecord[] = [
   {
     id: 'admin-001',
     email: 'admin@openndr.local',
-    fullName: 'Administrateur SOC',
+    fullName: 'SOC Administrator',
     role: 'Administrator',
     passwordHash: hashPassword('OpenNDR-Admin-2026!'),
     isActive: true,
@@ -211,21 +211,21 @@ interface AuthenticatedRequest extends Request {
 function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ detail: 'Jeton d’authentification manquant ou format invalide.' });
+    return res.status(401).json({ detail: 'Missing authentication token or invalid format.' });
   }
 
   const token = authHeader.split(' ')[1];
   const payload = verifyJWT(token);
   if (!payload) {
-    return res.status(401).json({ detail: 'Session invalide, expirée ou révoquée.' });
+    return res.status(401).json({ detail: 'Invalid, expired, or revoked session.' });
   }
 
   const user = usersStore.find((u) => u.id === payload.sub);
   if (!user) {
-    return res.status(401).json({ detail: 'Compte utilisateur introuvable.' });
+    return res.status(401).json({ detail: 'User account not found.' });
   }
   if (!user.isActive) {
-    return res.status(401).json({ detail: 'Compte utilisateur désactivé.' });
+    return res.status(401).json({ detail: 'User account disabled.' });
   }
 
   req.user = user;
@@ -237,12 +237,12 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
 function requirePermission(perm: string) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ detail: 'Authentification requise.' });
+      return res.status(401).json({ detail: 'Authentication required.' });
     }
     const perms = rolePermissions[req.user.role] || [];
     if (!perms.includes(perm)) {
       return res.status(403).json({
-        detail: `Privilège insuffisant. Permission requise : ${perm}`,
+        detail: `Insufficient privilege. Required permission: ${perm}`,
       });
     }
     next();
@@ -267,8 +267,8 @@ app.get('/api/v1/health', (_req, res) => {
       capture_active: isLiveCaptureRunning,
       packets_received: liveStats.packetsReceived,
       notice: isLiveCaptureRunning
-        ? 'Moteur V0.2 actif (AF_PACKET / PACKET_MMAP & décodage L2-L4).'
-        : 'Moteur V0.2 prêt (AF_PACKET / PACKET_MMAP & ingestion PCAP/PCAPNG).',
+        ? 'V0.2 engine active (AF_PACKET / PACKET_MMAP & L2-L4 decoding).'
+        : 'V0.2 engine ready (AF_PACKET / PACKET_MMAP & PCAP/PCAPNG ingestion).',
     },
     timestamp: new Date().toISOString(),
   });
@@ -282,7 +282,7 @@ app.get('/api/v1/health/ready', (_req, res) => {
   res.json({
     status: 'READY',
     database_connected: true,
-    details: 'Base de données relationnelle opérationnelle.',
+    details: 'Relational database operational.',
     timestamp: new Date().toISOString(),
   });
 });
@@ -293,24 +293,24 @@ app.post('/api/v1/auth/login', (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
 
   if (!email || !password) {
-    return res.status(400).json({ detail: 'Email et mot de passe obligatoires.' });
+    return res.status(400).json({ detail: 'Email and password are required.' });
   }
 
   const user = usersStore.find((u) => u.email.toLowerCase() === email.toLowerCase().trim());
   if (!user) {
-    logAudit('AUTH_LOGIN_FAILED', 'AUTH', 'FAILURE', email, undefined, undefined, ip, { reason: 'Compte introuvable' });
-    return res.status(401).json({ detail: 'Identifiants d’accès invalides.' });
+    logAudit('AUTH_LOGIN_FAILED', 'AUTH', 'FAILURE', email, undefined, undefined, ip, { reason: 'Account not found' });
+    return res.status(401).json({ detail: 'Invalid credentials.' });
   }
 
   if (!user.isActive) {
-    logAudit('AUTH_LOGIN_BLOCKED', 'AUTH', 'DENIED', user.email, user.id, user.id, ip, { reason: 'Compte désactivé' });
-    return res.status(401).json({ detail: 'Compte désactivé. Contactez l’administrateur.' });
+    logAudit('AUTH_LOGIN_BLOCKED', 'AUTH', 'DENIED', user.email, user.id, user.id, ip, { reason: 'Account disabled' });
+    return res.status(401).json({ detail: 'Account disabled. Please contact your administrator.' });
   }
 
   const isValid = verifyPassword(password, user.passwordHash);
   if (!isValid) {
-    logAudit('AUTH_LOGIN_FAILED', 'AUTH', 'FAILURE', user.email, user.id, user.id, ip, { reason: 'Mot de passe incorrect' });
-    return res.status(401).json({ detail: 'Identifiants d’accès invalides.' });
+    logAudit('AUTH_LOGIN_FAILED', 'AUTH', 'FAILURE', user.email, user.id, user.id, ip, { reason: 'Incorrect password' });
+    return res.status(401).json({ detail: 'Invalid credentials.' });
   }
 
   user.lastLoginAt = new Date().toISOString();
@@ -334,7 +334,7 @@ app.post('/api/v1/auth/logout', requireAuth, (req: AuthenticatedRequest, res: Re
   }
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
   logAudit('AUTH_LOGOUT', 'AUTH', 'SUCCESS', req.user!.email, req.user!.id, req.user!.id, ip);
-  res.json({ message: 'Déconnexion réussie' });
+  res.json({ message: 'Signed out successfully' });
 });
 
 app.get('/api/v1/auth/me', requireAuth, (req: AuthenticatedRequest, res: Response) => {
@@ -353,16 +353,16 @@ app.get('/api/v1/auth/me', requireAuth, (req: AuthenticatedRequest, res: Respons
 app.post('/api/v1/auth/change-password', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const { current_password, new_password } = req.body;
   if (!verifyPassword(current_password, req.user!.passwordHash)) {
-    return res.status(400).json({ detail: 'Le mot de passe actuel est incorrect.' });
+    return res.status(400).json({ detail: 'Current password is incorrect.' });
   }
   if (!new_password || new_password.length < 12) {
-    return res.status(400).json({ detail: 'Le nouveau mot de passe doit comporter au moins 12 caractères.' });
+    return res.status(400).json({ detail: 'New password must be at least 12 characters long.' });
   }
 
   req.user!.passwordHash = hashPassword(new_password);
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
   logAudit('AUTH_PASSWORD_CHANGED', 'USER', 'SUCCESS', req.user!.email, req.user!.id, req.user!.id, ip);
-  res.json({ message: 'Mot de passe modifié avec succès' });
+  res.json({ message: 'Password changed successfully' });
 });
 
 // Users Management (RBAC)
@@ -384,11 +384,11 @@ app.get('/api/v1/users', requireAuth, requirePermission('users:view'), (_req, re
 app.post('/api/v1/users', requireAuth, requirePermission('users:manage'), (req: AuthenticatedRequest, res: Response) => {
   const { email, full_name, role_name, password } = req.body;
   if (!email || !full_name || !role_name) {
-    return res.status(400).json({ detail: 'Champs obligatoires manquants.' });
+    return res.status(400).json({ detail: 'Missing required fields.' });
   }
 
   if (usersStore.some((u) => u.email.toLowerCase() === email.toLowerCase().trim())) {
-    return res.status(400).json({ detail: 'Un compte avec cette adresse e-mail existe déjà.' });
+    return res.status(400).json({ detail: 'An account with this email address already exists.' });
   }
 
   const rawPassword = password || `OpenNDR-${crypto.randomBytes(4).toString('hex').toUpperCase()}!2026`;
@@ -421,10 +421,10 @@ app.post('/api/v1/users', requireAuth, requirePermission('users:manage'), (req: 
 app.post('/api/v1/users/:id/toggle-active', requireAuth, requirePermission('users:manage'), (req: AuthenticatedRequest, res: Response) => {
   const target = usersStore.find((u) => u.id === req.params.id);
   if (!target) {
-    return res.status(404).json({ detail: 'Utilisateur introuvable.' });
+    return res.status(404).json({ detail: 'User not found.' });
   }
   if (target.id === req.user!.id && target.isActive) {
-    return res.status(400).json({ detail: 'Impossible de désactiver votre propre compte administrateur.' });
+    return res.status(400).json({ detail: 'Cannot disable your own administrator account.' });
   }
 
   target.isActive = !target.isActive;
@@ -445,7 +445,7 @@ app.post('/api/v1/users/:id/toggle-active', requireAuth, requirePermission('user
 app.put('/api/v1/users/:id', requireAuth, requirePermission('users:manage'), (req: AuthenticatedRequest, res: Response) => {
   const target = usersStore.find((u) => u.id === req.params.id);
   if (!target) {
-    return res.status(404).json({ detail: 'Utilisateur introuvable.' });
+    return res.status(404).json({ detail: 'User not found.' });
   }
   const { role_name, full_name } = req.body;
   if (role_name && ['Administrator', 'Analyst', 'Observer'].includes(role_name)) {
@@ -471,11 +471,11 @@ app.put('/api/v1/users/:id', requireAuth, requirePermission('users:manage'), (re
 app.delete('/api/v1/users/:id', requireAuth, requirePermission('users:manage'), (req: AuthenticatedRequest, res: Response) => {
   const idx = usersStore.findIndex((u) => u.id === req.params.id);
   if (idx === -1) {
-    return res.status(404).json({ detail: 'Utilisateur introuvable.' });
+    return res.status(404).json({ detail: 'User not found.' });
   }
   const target = usersStore[idx];
   if (target.id === req.user!.id) {
-    return res.status(400).json({ detail: 'Impossible de supprimer votre propre compte administrateur.' });
+    return res.status(400).json({ detail: 'Cannot delete your own administrator account.' });
   }
   usersStore.splice(idx, 1);
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
@@ -483,7 +483,7 @@ app.delete('/api/v1/users/:id', requireAuth, requirePermission('users:manage'), 
   res.status(204).send();
 });
 
-// Live Capture Engine state (V0.2 — Zéro donnée simulée au démarrage)
+// Live Capture Engine state (V0.2 — Zero simulated data at startup)
 let isLiveCaptureRunning = false;
 interface PacketSummaryItem {
   timestamp_us: number;
@@ -537,23 +537,23 @@ function runEngineIngest(filepath: string, displayPath: string, req: Request, re
   const binPath = findEngineBinary();
   if (!binPath) {
     return res.status(503).json({
-      detail: 'Binaire openndr-engine non compilé. Exécutez cargo build --release --manifest-path engine/Cargo.toml.',
+      detail: 'openndr-engine binary not compiled. Run cargo build --release --manifest-path engine/Cargo.toml.',
     });
   }
 
   execFile(binPath, ['--ingest', filepath], { timeout: 25000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
     if (error) {
-      return res.status(500).json({ detail: `Erreur d'ingestion Rust : ${stderr || error.message}` });
+      return res.status(500).json({ detail: `Rust ingestion error: ${stderr || error.message}` });
     }
     try {
       const jsonStart = stdout.indexOf('{');
       if (jsonStart === -1) {
-        return res.status(500).json({ detail: 'Réponse JSON invalide du moteur Rust.' });
+        return res.status(500).json({ detail: 'Invalid JSON response from Rust engine.' });
       }
       const result = JSON.parse(stdout.slice(jsonStart));
       result.file_path = displayPath;
 
-      // Mise à jour réelle à partir de la sortie du moteur Rust
+      // Update live telemetry from Rust engine output
       liveStats.packetsReceived += result.packets_processed || 0;
       liveStats.bytesProcessed += result.bytes_processed || 0;
       if (result.protocol_stats) {
@@ -580,7 +580,7 @@ function runEngineIngest(filepath: string, displayPath: string, req: Request, re
       return res.json(result);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      return res.status(500).json({ detail: `Parsing JSON échec : ${msg}` });
+      return res.status(500).json({ detail: `JSON parsing failed: ${msg}` });
     }
   });
 }
@@ -613,40 +613,40 @@ app.get('/api/v1/system/status', requireAuth, requirePermission('system:view'), 
         name: 'openndr-backend',
         unit: 'openndr-backend.service',
         status: 'active',
-        description: 'API REST FastAPI & Démon d’orchestration V0.2',
+        description: 'FastAPI REST API & V0.2 Orchestration Daemon',
       },
       {
         name: 'openndr-engine',
         unit: 'openndr-engine.service',
         status: isLiveCaptureRunning ? 'active' : 'ready',
-        description: 'Moteur Réseau Natif Rust V0.2 (AF_PACKET/PACKET_MMAP, décodage L2-L4, écriture rotative)',
+        description: 'Native Rust Network Engine V0.2 (AF_PACKET/PACKET_MMAP, L2-L4 decoding, rotating writer)',
       },
       {
         name: 'postgresql',
         unit: 'postgresql.service',
         status: 'active',
-        description: 'Base de données relationnelle : Connectée (Schémas Alembic synchronisés)',
+        description: 'Relational database: Connected (Alembic schemas synchronized)',
       },
       {
         name: 'openndr-web',
         unit: 'openndr-web.service',
         status: 'active',
-        description: 'Interface d’exploitation SOC Web',
+        description: 'SOC Web Management Interface',
       },
     ],
     interfaces: {
       admin: {
         name: 'eth0',
         role: 'ADMINISTRATION',
-        status: 'Configuré pour l’accès Web et API',
+        status: 'Configured for Web and API access',
       },
       capture: {
         name: 'eth1',
         role: 'CAPTURE_PASSIVE',
-        isolation: 'Mode furtif obligatoire (Zéro IP, Promiscuous)',
+        isolation: 'Mandatory stealth mode (Zero IP, Promiscuous)',
         capture_engine_active: isLiveCaptureRunning,
         capture_mode: isLiveCaptureRunning ? 'AF_PACKET_MMAP' : 'STANDBY',
-        notice: 'Moteur réseau V0.2 opérationnel (AF_PACKET/PACKET_MMAP natif & décodage L2-L4).',
+        notice: 'V0.2 network engine operational (native AF_PACKET/PACKET_MMAP & L2-L4 decoding).',
       },
     },
     storage: {
@@ -678,31 +678,31 @@ app.post('/api/v1/system/capture/start', requireAuth, requirePermission('interfa
   isLiveCaptureRunning = true;
   const u = (req as AuthenticatedRequest).user;
   logAudit('CAPTURE_START', 'ENGINE', 'SUCCESS', u?.email || 'admin@openndr.local', u?.id, 'eth1', req.ip || '127.0.0.1', {
-    message: 'Démarrage du moteur de capture passive AF_PACKET/PACKET_MMAP',
+    message: 'Started AF_PACKET/PACKET_MMAP passive capture engine',
   });
-  res.json({ status: 'OK', capture_mode: 'AF_PACKET_MMAP', message: 'Capture AF_PACKET active sur eth1' });
+  res.json({ status: 'OK', capture_mode: 'AF_PACKET_MMAP', message: 'AF_PACKET capture active on eth1' });
 });
 
 app.post('/api/v1/system/capture/stop', requireAuth, requirePermission('interfaces:manage'), (req: Request, res: Response) => {
   isLiveCaptureRunning = false;
   const u = (req as AuthenticatedRequest).user;
   logAudit('CAPTURE_STOP', 'ENGINE', 'SUCCESS', u?.email || 'admin@openndr.local', u?.id, 'eth1', req.ip || '127.0.0.1', {
-    message: 'Arrêt du moteur de capture passive',
+    message: 'Stopped passive capture engine',
   });
-  res.json({ status: 'OK', capture_mode: 'STANDBY', message: 'Capture arrêtée' });
+  res.json({ status: 'OK', capture_mode: 'STANDBY', message: 'Capture stopped' });
 });
 
 app.post('/api/v1/system/capture/ingest-pcap', requireAuth, requirePermission('interfaces:manage'), (req: Request, res: Response) => {
   const filepath = String(req.body?.filepath || '').trim();
   if (!filepath) {
-    return res.status(400).json({ detail: "Le champ 'filepath' est obligatoire." });
+    return res.status(400).json({ detail: "The 'filepath' field is required." });
   }
   const normalized = path.normalize(filepath);
   if (normalized.includes('..')) {
-    return res.status(400).json({ detail: 'Traversée de répertoire interdite.' });
+    return res.status(400).json({ detail: 'Directory traversal is forbidden.' });
   }
   if (!fs.existsSync(normalized)) {
-    return res.status(404).json({ detail: `Fichier trace introuvable : ${filepath}` });
+    return res.status(404).json({ detail: `Trace file not found: ${filepath}` });
   }
   return runEngineIngest(normalized, normalized, req, res, 'PCAP_INGEST_FILE');
 });
@@ -711,15 +711,15 @@ app.post('/api/v1/system/capture/upload-pcap', requireAuth, requirePermission('i
   const filename = path.basename(String(req.body?.filename || 'trace.pcap'));
   const contentB64 = req.body?.content_base64;
   if (!contentB64 || typeof contentB64 !== 'string') {
-    return res.status(400).json({ detail: "Le champ 'content_base64' est obligatoire." });
+    return res.status(400).json({ detail: "The 'content_base64' field is required." });
   }
   const ext = path.extname(filename).toLowerCase();
   if (!['.pcap', '.pcapng', '.cap'].includes(ext)) {
-    return res.status(400).json({ detail: 'Format invalide : extensions acceptées .pcap, .pcapng, .cap.' });
+    return res.status(400).json({ detail: 'Invalid format: accepted extensions are .pcap, .pcapng, .cap.' });
   }
   const rawBuffer = Buffer.from(contentB64, 'base64');
   if (rawBuffer.length === 0) {
-    return res.status(400).json({ detail: 'Fichier PCAP vide.' });
+    return res.status(400).json({ detail: 'Empty PCAP file.' });
   }
 
   const tmpFile = path.join(os.tmpdir(), `openndr_upload_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`);
@@ -727,7 +727,7 @@ app.post('/api/v1/system/capture/upload-pcap', requireAuth, requirePermission('i
     fs.writeFileSync(tmpFile, rawBuffer);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ detail: `Impossible d'écrire le fichier temporaire : ${msg}` });
+    return res.status(500).json({ detail: `Unable to write temporary file: ${msg}` });
   }
 
   const origJson = res.json.bind(res);
@@ -790,7 +790,7 @@ app.get('/api/v1/system/interfaces/isolation-check', requireAuth, requirePermiss
       has_ip: false,
       has_routes: false,
       is_promiscuous: false,
-      details: "L'interface de capture passive 'eth1' n'existe pas sur le système hôte.",
+      details: "Passive capture interface 'eth1' does not exist on the host system.",
     });
   }
 
@@ -805,7 +805,7 @@ app.get('/api/v1/system/interfaces/isolation-check', requireAuth, requirePermiss
       has_ip: true,
       has_routes: false,
       is_promiscuous: false,
-      details: `Violation d'isolation furtive : l'interface passive possède des adresses IP configurées (${ips.join(', ')}).`,
+      details: `Stealth isolation violation: passive interface has configured IP addresses (${ips.join(', ')}).`,
     });
   }
 
@@ -816,7 +816,7 @@ app.get('/api/v1/system/interfaces/isolation-check', requireAuth, requirePermiss
     has_ip: false,
     has_routes: false,
     is_promiscuous: true,
-    details: 'Conformité d\'isolation validée : mode furtif actif, aucune adresse IP assignée.',
+    details: 'Isolation compliance verified: stealth mode active, no IP address assigned.',
   });
 });
 

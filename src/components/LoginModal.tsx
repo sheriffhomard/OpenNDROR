@@ -32,7 +32,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       if (err instanceof Error) {
         setErrorMsg(err.message);
       } else {
-        setErrorMsg("Échec de l'authentification.");
+        setErrorMsg('Authentication failed.');
       }
     } finally {
       setLoading(false);
@@ -47,7 +47,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <div className="w-7 h-7 rounded bg-emerald-950/80 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
               <Shield className="w-4 h-4" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-100">Connexion Console SOC OpenNDR</h3>
+            <h3 className="text-sm font-semibold text-slate-100">OpenNDR SOC Console Sign In</h3>
           </div>
           <button
             onClick={onClose}
@@ -67,11 +67,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs pt-1">
           <div>
-            <label className="block text-slate-300 mb-1 font-medium">Adresse E-mail SOC</label>
+            <label className="block text-slate-300 mb-1 font-medium">SOC Email Address</label>
             <input
               type="text"
               required
-              placeholder="ex: admin@openndr.local"
+              placeholder="e.g. admin@openndr.local"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
@@ -80,7 +80,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-slate-300 mb-1 font-medium">Mot de passe</label>
+            <label className="block text-slate-300 mb-1 font-medium">Password</label>
             <input
               type="password"
               required
@@ -94,7 +94,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
           <div className="p-2.5 bg-slate-950 border border-slate-800/80 rounded-lg text-slate-400 flex items-center gap-2">
             <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Authentification PostgreSQL protégée par hachage Argon2id natif.</span>
+            <span>PostgreSQL authentication secured by native Argon2id hashing.</span>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
@@ -104,7 +104,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               disabled={loading}
               className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
             >
-              Fermer
+              Close
             </button>
             <button
               type="submit"
@@ -112,7 +112,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{loading ? 'Connexion en cours...' : "S'authentifier"}</span>
+              <span>{loading ? 'Signing in...' : 'Sign In'}</span>
             </button>
           </div>
         </form>

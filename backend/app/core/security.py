@@ -46,30 +46,30 @@ def validate_password_strength(password: str) -> Tuple[bool, Optional[str]]:
     - Au moins un caractère spécial
     """
     if len(password) < 12:
-        return False, "Le mot de passe doit comporter au moins 12 caractères."
+        return False, "Password must be at least 12 characters long."
     if not re.search(r"[A-Z]", password):
-        return False, "Le mot de passe doit contenir au moins une lettre majuscule."
+        return False, "Password must contain at least one uppercase letter."
     if not re.search(r"[a-z]", password):
-        return False, "Le mot de passe doit contenir au moins une lettre minuscule."
+        return False, "Password must contain at least one lowercase letter."
     if not re.search(r"\d", password):
-        return False, "Le mot de passe doit contenir au moins un chiffre."
+        return False, "Password must contain at least one digit."
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>\-_=+/\\\[\]~`]", password):
-        return False, "Le mot de passe doit contenir au moins un caractère spécial."
+        return False, "Password must contain at least one special character."
     return True, None
 
 
 def hash_password(password: str) -> str:
     """
-    Hache le mot de passe avec Argon2id obligatoirement en production.
-    Tout fallback vers PBKDF2 est strictement interdit en production.
+    Hashes passwords using mandatory Argon2id in production.
+    Fallback to PBKDF2 is strictly forbidden in production.
     """
     if HAS_NATIVE_ARGON2 and _argon2_hasher is not None:
         return _argon2_hasher.hash(password)
 
     if settings.OPENNDR_ENV.lower() == "production":
         raise RuntimeError(
-            "[FATAL SÉCURITÉ] Argon2id est obligatoire en production mais argon2-cffi n'est pas disponible. "
-            "Le démarrage est interrompu pour prévenir toute faiblesse cryptographique."
+            "[FATAL SECURITY] Argon2id is mandatory in production, but argon2-cffi is not available. "
+            "Startup aborted to prevent cryptographic weakness."
         )
 
     # Fallback sécurisé standard PBKDF2 pour tests/développement local
@@ -164,7 +164,7 @@ def is_token_revoked(jti: str, db: Optional[Session] = None) -> bool:
     if db is None:
         if settings.OPENNDR_ENV.lower() == "production":
             raise DatabaseSecurityError(
-                "Contrôle de sécurité impossible : session PostgreSQL manquante en environnement de production."
+                "Security check failed: PostgreSQL session missing in production environment."
             )
         return False
 
@@ -173,16 +173,16 @@ def is_token_revoked(jti: str, db: Optional[Session] = None) -> bool:
         rev = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
         return rev is not None
     except Exception as e:
-        # FAIL-CLOSED : ne jamais transformer une erreur DB en absence de révocation
+        # FAIL-CLOSED: never turn a DB error into non-revocation
         raise DatabaseSecurityError(
-            f"Échec critique du contrôle de révocation JWT en base de données : {e}"
+            f"Critical failure during JWT revocation check in database: {e}"
         )
 
 
 def revoke_token(token: str, db: Optional[Session] = None) -> bool:
     """
-    Révoque un jeton actif et persiste l'invalidation dans PostgreSQL.
-    Comportement FAIL-CLOSED : échoue avec DatabaseSecurityError si l'écriture ne peut être garantie.
+    Revokes an active token and persists invalidation in PostgreSQL.
+    FAIL-CLOSED behavior: raises DatabaseSecurityError if persistence cannot be guaranteed.
     """
     payload = decode_token(token, db=db, check_revocation=False)
     if not payload or "jti" not in payload:
@@ -200,7 +200,7 @@ def revoke_token(token: str, db: Optional[Session] = None) -> bool:
     if db is None:
         if settings.OPENNDR_ENV.lower() == "production":
             raise DatabaseSecurityError(
-                "Impossible de révoquer le jeton sans session PostgreSQL persistante."
+                "Unable to revoke token without a persistent PostgreSQL session."
             )
         return True
 
@@ -217,7 +217,7 @@ def revoke_token(token: str, db: Optional[Session] = None) -> bool:
             db.add(entry)
             db.commit()
 
-        # Nettoyage opportuniste des anciens jetons révoqués dont l'expiration naturelle est dépassée
+        # Opportunistic cleanup of expired revoked tokens
         now = datetime.now(timezone.utc)
         db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
         db.commit()
@@ -225,7 +225,7 @@ def revoke_token(token: str, db: Optional[Session] = None) -> bool:
     except Exception as e:
         db.rollback()
         raise DatabaseSecurityError(
-            f"Échec de persistance de la révocation du jeton dans PostgreSQL : {e}"
+            f"Failed to persist token revocation in PostgreSQL: {e}"
         )
 
 

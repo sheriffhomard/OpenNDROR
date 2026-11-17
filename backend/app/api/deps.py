@@ -1,5 +1,5 @@
 """
-Dépendances FastAPI pour l'authentification et le contrôle d'accès RBAC
+FastAPI dependencies for authentication and RBAC access control
 """
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Header, Request
@@ -11,7 +11,7 @@ from app.models.user import User
 
 
 def get_client_ip(request: Request) -> str:
-    """Extrait l'adresse IP cliente réelle même derrière un reverse-proxy HTTPS."""
+    """Extracts the real client IP address even behind an HTTPS reverse proxy."""
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -26,14 +26,14 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     """
-    Extrait et valide le jeton JWT.
-    Vérifie l'existence et l'état actif du compte dans PostgreSQL.
-    Comportement FAIL-CLOSED : en cas d'erreur DB sur la révocation, l'accès est refusé avec 503.
+    Extracts and validates the JWT token.
+    Verifies account existence and active status in PostgreSQL.
+    FAIL-CLOSED behavior: on DB revocation check failure, access is denied with 503.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Jeton d'authentification manquant ou format invalide.",
+            detail="Missing authentication token or invalid format.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -43,14 +43,14 @@ def get_current_user(
     except DatabaseSecurityError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service d'authentification indisponible (contrôle de révocation impossible).",
+            detail="Authentication service unavailable (unable to verify token revocation).",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session invalide, révoquée ou expirée.",
+            detail="Invalid, revoked, or expired session.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -58,20 +58,20 @@ def get_current_user(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Charge utile du jeton invalide.",
+            detail="Invalid token payload.",
         )
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Compte utilisateur introuvable.",
+            detail="User account not found.",
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Compte utilisateur désactivé.",
+            detail="User account disabled.",
         )
 
     return user
@@ -79,14 +79,14 @@ def get_current_user(
 
 def require_permission(perm_code: str):
     """
-    Vérification stricte de permission côté serveur.
-    Rejette toute requête non autorisée avec un code HTTP 403.
+    Strict server-side permission check.
+    Rejects any unauthorized request with HTTP 403.
     """
     def checker(user: User = Depends(get_current_user)) -> User:
         if not user.has_permission(perm_code):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Privilège insuffisant. Permission requise : {perm_code}",
+                detail=f"Insufficient privilege. Required permission: {perm_code}",
             )
         return user
     return checker

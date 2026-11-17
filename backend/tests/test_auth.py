@@ -31,22 +31,22 @@ class TestSecurityV01(unittest.TestCase):
         self.assertTrue(needs_rehash, "Un condensat PBKDF2 doit déclencher needs_rehash=True pour migrer vers Argon2id")
 
     def test_password_strength_policy(self):
-        # Trop court (< 12)
+        # Too short (< 12)
         valid, err = validate_password_strength("Short1!")
         self.assertFalse(valid)
-        self.assertIn("12 caractères", err)
+        self.assertIn("12 characters", err)
 
-        # Pas de chiffre
+        # No digit
         valid, err = validate_password_strength("NoDigitsHere!!")
         self.assertFalse(valid)
-        self.assertIn("chiffre", err)
+        self.assertIn("digit", err)
 
-        # Pas de caractère spécial
+        # No special character
         valid, err = validate_password_strength("NoSpecialChar123")
         self.assertFalse(valid)
-        self.assertIn("spécial", err)
+        self.assertIn("special character", err)
 
-        # Valide
+        # Valid
         valid, err = validate_password_strength("SuperStrongPass2026!")
         self.assertTrue(valid)
         self.assertIsNone(err)

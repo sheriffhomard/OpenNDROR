@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
-console.log('[*] Vérification de l\'intégrité du Frontend OpenNDR V0.2...');
+console.log('[*] Verifying OpenNDR V0.2 Frontend Integrity...');
 
-// 1. Contrôle d'absence de données simulées
+// 1. Check absence of simulated/mock data
 const forbiddenPatterns = [
   'MOCK_USERS',
   'INITIAL_USERS',
@@ -28,7 +28,7 @@ function checkDirectory(dir) {
       const content = fs.readFileSync(fullPath, 'utf-8');
       for (const pattern of forbiddenPatterns) {
         if (content.includes(pattern)) {
-          console.error(`[✗] Symbole interdit détecté dans ${fullPath}: "${pattern}"`);
+          console.error(`[✗] Forbidden symbol detected in ${fullPath}: "${pattern}"`);
           errors++;
         }
       }
@@ -39,12 +39,12 @@ function checkDirectory(dir) {
 
 const errors = checkDirectory('./src');
 if (errors > 0) {
-  console.error(`[FATAL] ${errors} motif(s) simulé(s) non autorisés trouvés dans src/`);
+  console.error(`[FATAL] ${errors} unauthorized mock pattern(s) found in src/`);
   process.exit(1);
 }
-console.log('[✓] Aucune donnée simulée ni motif fictif détecté dans src/.');
+console.log('[✓] No simulated data or mock patterns detected in src/.');
 
-// 2. Vérification des méthodes API réelles
+// 2. Verify real API methods
 const apiContent = fs.readFileSync('./src/services/api.ts', 'utf-8');
 const requiredMethods = [
   'login',
@@ -71,10 +71,10 @@ const requiredMethods = [
 
 for (const method of requiredMethods) {
   if (!apiContent.includes(`${method}(`)) {
-    console.error(`[✗] Méthode d'API requise manquante dans api.ts : ${method}`);
+    console.error(`[✗] Required API method missing in api.ts: ${method}`);
     process.exit(1);
   }
 }
-console.log('[✓] Toutes les méthodes API REST /api/v1/* sont implémentées et exportées.');
-console.log('[✓] Validation Frontend réussie.');
+console.log('[✓] All REST /api/v1/* API methods are implemented and exported.');
+console.log('[✓] Frontend validation succeeded.');
 process.exit(0);

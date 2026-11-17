@@ -30,18 +30,18 @@ export const Navigation: React.FC<NavigationProps> = ({
   hasViolation,
 }) => {
   const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string; alert?: boolean }[] = [
-    { id: 'dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
-    { id: 'capture', label: 'Capture & Décodage V0.2', icon: Activity },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'capture', label: 'Capture & Decoding V0.2', icon: Activity },
     {
       id: 'interfaces',
       label: 'Interfaces & Isolation',
       icon: Network,
       alert: hasViolation,
     },
-    { id: 'rbac', label: 'Accès & Rôles RBAC', icon: Users },
-    { id: 'audit', label: 'Journal d’Audit', icon: FileText },
-    { id: 'validation', label: 'Recette & Validation', icon: CheckCircle2 },
-    { id: 'docs', label: 'Architecture & Déploiement', icon: BookOpen },
+    { id: 'rbac', label: 'RBAC & Access', icon: Users },
+    { id: 'audit', label: 'Audit Log', icon: FileText },
+    { id: 'validation', label: 'Validation & Probes', icon: CheckCircle2 },
+    { id: 'docs', label: 'Architecture & Docs', icon: BookOpen },
   ];
 
   return (
@@ -64,7 +64,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                 <span>{tab.label}</span>
                 {tab.alert && (
-                  <span className="w-2 h-2 rounded-full bg-rose-500" title="Alerte d'isolation détectée" />
+                  <span className="w-2 h-2 rounded-full bg-rose-500" title="Isolation alert detected" />
                 )}
               </button>
             );

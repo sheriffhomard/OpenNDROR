@@ -16,70 +16,70 @@ export const DocsView: React.FC = () => {
   const roadmapMilestones = [
     {
       version: 'V0.1',
-      title: 'Fondations Techniques & Architecture',
-      status: 'TERMINÉ',
+      title: 'Technical Foundations & Architecture',
+      status: 'COMPLETED',
       completed: true,
       points: [
-        'Architecture modulaire à 3 niveaux (Moteur Rust, Backend FastAPI, Web React)',
-        'Contrôle RBAC serveur (Administrator, Analyst, Observer)',
-        'Séparation étanche des interfaces réseau (eth0 admin vs eth1 capture passive)',
-        'Schémas PostgreSQL et migrations Alembic initiales',
-        'Unités systemd Debian 13 et scripts install/uninstall',
+        '3-tier modular architecture (Rust Engine, FastAPI Backend, React Web UI)',
+        'Server-enforced RBAC access control (Administrator, Analyst, Observer)',
+        'Strict network interface separation (eth0 admin vs eth1 passive capture)',
+        'PostgreSQL schemas and initial Alembic migrations',
+        'Debian 13 systemd units and install/uninstall scripts',
       ],
     },
     {
       version: 'V0.2',
-      title: 'Capture & Décodage des Paquets',
-      status: 'TERMINÉ',
+      title: 'Packet Capture & Decoding',
+      status: 'COMPLETED',
       completed: true,
       points: [
-        'Capture passive temps réel AF_PACKET (ring buffer PACKET_MMAP TPACKET_V2) et compatibilité libpcap',
-        'Ingestion et décodage de traces réseau PCAP / PCAPNG',
-        'Décodage hiérarchique L2–L4 : Ethernet II, VLAN 802.1Q, ARP, IPv4, IPv6, ICMP, TCP, UDP',
-        'Écriture PCAP rotative locale et explorateur de paquets dans l’interface Web',
+        'Real-time passive AF_PACKET capture (PACKET_MMAP TPACKET_V2 ring buffer) & libpcap compatibility',
+        'PCAP / PCAPNG trace ingestion and decoding',
+        'Hierarchical L2–L4 decoding: Ethernet II, 802.1Q VLAN, ARP, IPv4, IPv6, ICMP, TCP, UDP',
+        'Local rotating PCAP writer and interactive Web packet explorer',
       ],
     },
     {
       version: 'V0.3',
-      title: 'Flux & Protocoles',
-      status: 'PROCHAINE ÉTAPE',
+      title: 'Flows & Protocols',
+      status: 'NEXT MILESTONE',
       completed: false,
       points: [
-        'Reconstruction des communications TCP/UDP et gestion des sessions',
-        'Analyseurs de protocoles : DNS, DHCP, HTTP, métadonnées TLS (SNI/JA3), SSH',
-        'Gestion mémoire bornée pour les sessions réseau actives',
+        'TCP/UDP stream reconstruction and session state tracking',
+        'Protocol parsers: DNS, DHCP, HTTP, TLS metadata (SNI/JA3), SSH',
+        'Bounded memory management for active network sessions',
       ],
     },
     {
       version: 'V0.4',
-      title: 'Moteur de Détection Autonome',
-      status: 'PLANIFIÉ',
+      title: 'Autonomous Detection Engine',
+      status: 'PLANNED',
       completed: false,
       points: [
-        'Moteur de règles de détection par signatures et motifs réseau',
-        'Détection comportementale et par seuils (port scans, balayages, tunnels DNS)',
-        'Système d’alertes de sécurité avec justification technique explicable',
+        'Signature and network pattern detection rule engine',
+        'Behavioral & threshold-based detection (port scans, sweeps, DNS tunneling)',
+        'Security alerting system with explainable technical evidence',
       ],
     },
     {
       version: 'V0.5',
-      title: 'Corrélation & Gestion d’Incidents',
-      status: 'PLANIFIÉ',
+      title: 'Correlation & Incident Management',
+      status: 'PLANNED',
       completed: false,
       points: [
-        'Moteur de corrélation temporelle d’alertes multi-sources',
-        'Dossiers d’incidents de sécurité, chronologie et notes d’investigation',
-        'Déduplication et réduction du bruit d’alertes',
+        'Multi-source temporal alert correlation engine',
+        'Security incident cases, timelines, and investigation notes',
+        'Alert deduplication and noise reduction',
       ],
     },
     {
       version: 'V1.0',
-      title: 'Première Version Stable Production',
-      status: 'OBJECTIF FINAL',
+      title: 'First Production-Stable Release',
+      status: 'FINAL TARGET',
       completed: false,
       points: [
-        'Plateforme NDR totalement souveraine, sans dépendance tierce obligatoire',
-        'Packaging Debian complet, tests de charge 100 Mbit/s+, audits de sécurité',
+        'Fully sovereign NDR platform with zero mandatory third-party dependencies',
+        'Full Debian packaging, 100+ Mbps load testing, and security audits',
       ],
     },
   ];
@@ -91,11 +91,11 @@ export const DocsView: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-100">
-              Documentation Technique & Feuilles de Route
+              Technical Documentation & Roadmap
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Consultez les spécifications, décisions d'architecture (ADR) et guides d'exploitation
-              directement embarqués dans la plateforme OpenNDR.
+              Browse technical specifications, Architecture Decision Records (ADRs), and operations guides
+              embedded directly within the OpenNDR platform.
             </p>
           </div>
           <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg text-xs">
@@ -113,7 +113,7 @@ export const DocsView: React.FC = () => {
                 activeDoc === 'adr' ? 'bg-slate-800 text-slate-100 font-medium' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Décisions ADR
+              ADR Decisions
             </button>
             <button
               onClick={() => setActiveDoc('install')}
@@ -121,7 +121,7 @@ export const DocsView: React.FC = () => {
                 activeDoc === 'install' ? 'bg-slate-800 text-slate-100 font-medium' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Installation Debian 13
+              Debian 13 Setup
             </button>
             <button
               onClick={() => setActiveDoc('specs')}
@@ -129,7 +129,7 @@ export const DocsView: React.FC = () => {
                 activeDoc === 'specs' ? 'bg-slate-800 text-slate-100 font-medium' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Spécifications & API
+              Specs & API
             </button>
           </div>
         </div>
@@ -141,10 +141,10 @@ export const DocsView: React.FC = () => {
           <div>
             <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
               <Milestone className="w-4 h-4 text-emerald-400" />
-              Feuille de Route Officielle du Produit OpenNDR
+              Official OpenNDR Product Roadmap
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Évolution méthodique par version jalonnée, avec critères d'acceptation stricts avant chaque transition.
+              Methodical milestone-driven evolution with strict acceptance criteria before each version transition.
             </p>
           </div>
 
@@ -169,7 +169,7 @@ export const DocsView: React.FC = () => {
                     className={`text-xs font-mono px-2 py-0.5 rounded font-medium ${
                       m.completed
                         ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40'
-                        : m.status === 'PROCHAINE ÉTAPE'
+                        : m.status === 'NEXT MILESTONE'
                         ? 'bg-sky-950 text-sky-400 border border-sky-800/40'
                         : 'bg-slate-800 text-slate-400'
                     }`}
@@ -201,41 +201,41 @@ export const DocsView: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs font-bold text-emerald-400">ADR-001</span>
-              <span className="text-xs text-slate-400 font-mono">Accepté · 2026-11-06</span>
+              <span className="text-xs text-slate-400 font-mono">Accepted · 2026-11-06</span>
             </div>
             <h3 className="text-sm font-semibold text-slate-100">
-              Choix du langage Rust pour le moteur d’analyse réseau
+              Selection of Rust for the Network Analysis Engine
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              <strong>Décision :</strong> Implémenter l'ensemble des analyseurs de paquets, la machine à états de flux et le DPI en Rust.
-              Élimine par conception les vulnérabilités de corruption mémoire (Buffer Overflows, Use-After-Free) qui affectent traditionnellement les décodeurs C/C++ sur des flux non fiables, tout en maintenant un débit équivalent sans Garbage Collector.
+              <strong>Decision:</strong> Implement all packet decoders, flow state machines, and DPI in Rust.
+              Eliminates memory-corruption vulnerabilities (Buffer Overflows, Use-After-Free) that traditionally affect C/C++ decoders processing untrusted traffic, while maintaining equivalent throughput with no garbage collector.
             </p>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs font-bold text-sky-400">ADR-002</span>
-              <span className="text-xs text-slate-400 font-mono">Accepté · 2026-11-06</span>
+              <span className="text-xs text-slate-400 font-mono">Accepted · 2026-11-06</span>
             </div>
             <h3 className="text-sm font-semibold text-slate-100">
-              Backend d’orchestration en FastAPI & SQLAlchemy
+              FastAPI & SQLAlchemy Orchestration Backend
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              <strong>Décision :</strong> Utiliser FastAPI (Python 3.10+) pour le service de gestion, l'API REST, la gestion des utilisateurs et l'authentification.
-              Le backend ne réalise aucune capture de paquets sur ses processus HTTP et dialogue avec le moteur Rust uniquement par socket UNIX local dédié.
+              <strong>Decision:</strong> Use FastAPI (Python 3.10+) for the management service, REST API, user lifecycle, and authentication.
+              The backend performs no packet capture within HTTP worker processes and communicates with the Rust engine strictly over a dedicated local UNIX socket.
             </p>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs font-bold text-purple-400">ADR-003</span>
-              <span className="text-xs text-slate-400 font-mono">Accepté · 2026-11-06</span>
+              <span className="text-xs text-slate-400 font-mono">Accepted · 2026-11-06</span>
             </div>
             <h3 className="text-sm font-semibold text-slate-100">
-              Séparation stricte entre interface d’administration et de capture
+              Strict Separation Between Management and Capture Interfaces
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              <strong>Décision :</strong> Imposer 2 interfaces réseau matérielles distinctes. L'interface passive connectée au SPAN/TAP ne doit posséder aucune adresse IP (0.0.0.0), aucun routage, et bloque toute réponse ARP ou émission de paquet par durcissement sysctl kernel.
+              <strong>Decision:</strong> Enforce 2 distinct physical network interfaces. The passive interface connected to SPAN/TAP must have no IP address (0.0.0.0), no routing, and blocks all ARP replies or outbound packet transmission via kernel sysctl hardening.
             </p>
           </div>
         </div>
@@ -244,23 +244,23 @@ export const DocsView: React.FC = () => {
       {activeDoc === 'install' && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
           <h3 className="text-sm font-semibold text-slate-100">
-            Guide d’Installation & Déploiement sur Debian 13 (Trixie)
+            Debian 13 (Trixie) Installation & Deployment Guide
           </h3>
           <p className="text-xs text-slate-400">
-            OpenNDR est conçu pour fonctionner nativement sous Debian sans Docker obligatoire, géré par systemd.
+            OpenNDR is designed to run natively on Debian with no mandatory Docker dependency, managed by systemd.
           </p>
 
           <div className="space-y-3 font-mono text-xs text-slate-300 bg-slate-950 p-4 rounded-xl border border-slate-800">
-            <div className="text-slate-500"># 1. Vérification des prérequis système (CPU, RAM, interfaces)</div>
+            <div className="text-slate-500"># 1. Check system prerequisites (CPU, RAM, interfaces)</div>
             <div className="text-emerald-400">sudo bash deployment/debian/check-prerequisites.sh</div>
 
-            <div className="text-slate-500 pt-2"># 2. Exécution du script d’installation natif</div>
+            <div className="text-slate-500 pt-2"># 2. Run native installation script</div>
             <div className="text-emerald-400">sudo bash deployment/debian/install.sh</div>
 
-            <div className="text-slate-500 pt-2"># 3. Démarrage des démons systemd</div>
+            <div className="text-slate-500 pt-2"># 3. Start systemd daemons</div>
             <div className="text-emerald-400">sudo systemctl enable --now openndr-backend openndr-engine openndr-web</div>
 
-            <div className="text-slate-500 pt-2"># 4. Vérification de l’état de santé</div>
+            <div className="text-slate-500 pt-2"># 4. Verify platform health status</div>
             <div className="text-emerald-400">curl -s http://127.0.0.1:8000/api/v1/health | jq</div>
           </div>
         </div>
@@ -269,10 +269,10 @@ export const DocsView: React.FC = () => {
       {activeDoc === 'specs' && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
           <h3 className="text-sm font-semibold text-slate-100">
-            Spécification des Endpoints de l’API REST V0.2
+            V0.2 REST API Endpoint Specification
           </h3>
           <p className="text-xs text-slate-400">
-            Contrats d'interface OpenAPI normalisés pour l'intégration avec le SIEM ou l'interface SOC.
+            Standardized OpenAPI interface contracts for SIEM and SOC console integration.
           </p>
 
           <div className="divide-y divide-slate-800 font-mono text-xs">
@@ -281,56 +281,56 @@ export const DocsView: React.FC = () => {
                 <span className="text-emerald-400 font-bold">GET</span>
                 <span className="text-slate-200">/api/v1/health</span>
               </div>
-              <span className="text-slate-500">Public · Vérification de santé plateforme & moteur</span>
+              <span className="text-slate-500">Public · Platform & engine health check</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sky-400 font-bold">POST</span>
                 <span className="text-slate-200">/api/v1/auth/login</span>
               </div>
-              <span className="text-slate-500">Public · Authentification Argon2/JWT</span>
+              <span className="text-slate-500">Public · Argon2/JWT authentication</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-emerald-400 font-bold">GET</span>
                 <span className="text-slate-200">/api/v1/auth/me</span>
               </div>
-              <span className="text-slate-500">Bearer Auth · Profil utilisateur</span>
+              <span className="text-slate-500">Bearer Auth · User profile</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-emerald-400 font-bold">GET</span>
                 <span className="text-slate-200">/api/v1/system/status</span>
               </div>
-              <span className="text-slate-500">system:view · Télémétrie services & moteur</span>
+              <span className="text-slate-500">system:view · Services & engine telemetry</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-emerald-400 font-bold">GET</span>
                 <span className="text-slate-200">/api/v1/system/capture/telemetry</span>
               </div>
-              <span className="text-slate-500">system:view · Débit, drops & compteurs L2–L4</span>
+              <span className="text-slate-500">system:view · Throughput, drops & L2–L4 counters</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sky-400 font-bold">POST</span>
                 <span className="text-slate-200">/api/v1/system/capture/start | stop</span>
               </div>
-              <span className="text-slate-500">interfaces:manage · Pilotage capture AF_PACKET</span>
+              <span className="text-slate-500">interfaces:manage · AF_PACKET capture control</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sky-400 font-bold">POST</span>
                 <span className="text-slate-200">/api/v1/system/capture/ingest-pcap | upload-pcap</span>
               </div>
-              <span className="text-slate-500">interfaces:manage · Décodage traces PCAP/PCAPNG</span>
+              <span className="text-slate-500">interfaces:manage · PCAP/PCAPNG trace decoding</span>
             </div>
             <div className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-emerald-400 font-bold">GET</span>
                 <span className="text-slate-200">/api/v1/system/audit</span>
               </div>
-              <span className="text-slate-500">audit:view · Journal d’audit de sécurité</span>
+              <span className="text-slate-500">audit:view · Security audit log</span>
             </div>
           </div>
         </div>

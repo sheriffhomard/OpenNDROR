@@ -78,7 +78,7 @@ def update_user(
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur introuvable.",
+            detail="User not found.",
         )
 
     ip_addr = get_client_ip(request)
@@ -113,7 +113,7 @@ def toggle_user_active(
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur introuvable.",
+            detail="User not found.",
         )
 
     ip_addr = get_client_ip(request)
@@ -148,7 +148,7 @@ def delete_user(
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur introuvable.",
+            detail="User not found.",
         )
 
     ip_addr = get_client_ip(request)

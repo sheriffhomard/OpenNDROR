@@ -6,7 +6,7 @@ from app.api.v1.health import router as health_router
 
 api_v1_router = APIRouter()
 
-api_v1_router.include_router(health_router, prefix="/health", tags=["Santé"])
-api_v1_router.include_router(auth_router, prefix="/auth", tags=["Authentification"])
-api_v1_router.include_router(users_router, prefix="/users", tags=["Utilisateurs"])
-api_v1_router.include_router(system_router, prefix="/system", tags=["Système"])
+api_v1_router.include_router(health_router, prefix="/health", tags=["Health"])
+api_v1_router.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+api_v1_router.include_router(users_router, prefix="/users", tags=["Users"])
+api_v1_router.include_router(system_router, prefix="/system", tags=["System"])

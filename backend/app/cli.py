@@ -24,34 +24,34 @@ def check_database_migrated():
 
         if not required_tables.issubset(existing_tables):
             missing = required_tables - existing_tables
-            print("[ERREUR SÉCURITÉ] La base de données n'est pas prête ou les migrations sont incomplètes.")
-            print(f"Tables requises manquantes : {', '.join(sorted(missing))}")
-            print("Veuillez exécuter les migrations officielles avant le bootstrap administrateur :")
+            print("[SECURITY ERROR] Database is not ready or migrations are incomplete.")
+            print(f"Missing required tables: {', '.join(sorted(missing))}")
+            print("Please run official migrations before administrator bootstrap:")
             print("    alembic upgrade head")
             sys.exit(1)
     except Exception as e:
-        print(f"[ERREUR SÉCURITÉ] Impossible de vérifier l'état de la base de données : {e}")
-        print("Vérifiez que PostgreSQL est démarré et accessible via DATABASE_URL.")
+        print(f"[SECURITY ERROR] Unable to verify database state: {e}")
+        print("Ensure PostgreSQL is running and accessible via DATABASE_URL.")
         sys.exit(1)
 
 
 def init_roles_and_permissions(db):
-    """Initialise les rôles et permissions canoniques V0.1 dans la base migrée."""
+    """Initializes canonical V0.1 roles and permissions in the migrated database."""
     roles_def = [
-        ("Administrator", "Gestion intégrale de la sonde, utilisateurs et configurations"),
-        ("Analyst", "Investigation des événements, alertes et consultation des journaux"),
-        ("Observer", "Consultation en lecture seule des métriques de la plateforme"),
+        ("Administrator", "Full management of sensor, users, and configurations"),
+        ("Analyst", "Event investigation, alerts, and log consultation"),
+        ("Observer", "Read-only viewing of platform metrics"),
     ]
 
     permissions_def = [
-        ("system:view", "Consulter l'état général et les métriques", "system"),
-        ("system:manage", "Gérer les services et configurations", "system"),
-        ("interfaces:view", "Consulter la configuration réseau", "network"),
-        ("interfaces:manage", "Configurer et valider les interfaces", "network"),
-        ("users:view", "Consulter les comptes utilisateurs", "users"),
-        ("users:manage", "Créer, modifier ou désactiver des utilisateurs", "users"),
-        ("audit:view", "Consulter le journal d'audit de sécurité", "audit"),
-        ("storage:manage", "Gérer les quotas et la rétention PCAP", "storage"),
+        ("system:view", "View overall status and metrics", "system"),
+        ("system:manage", "Manage services and configurations", "system"),
+        ("interfaces:view", "View network configuration", "network"),
+        ("interfaces:manage", "Configure and validate interfaces", "network"),
+        ("users:view", "View user accounts", "users"),
+        ("users:manage", "Create, edit, or disable users", "users"),
+        ("audit:view", "View security audit log", "audit"),
+        ("storage:manage", "Manage PCAP quotas and retention", "storage"),
     ]
 
     created_roles = {}
@@ -74,11 +74,11 @@ def init_roles_and_permissions(db):
             db.refresh(perm)
         created_perms[code] = perm
 
-    # Attribution Administrator : toutes les permissions
+    # Administrator assignment: all permissions
     admin_role = created_roles["Administrator"]
     admin_role.permissions = list(created_perms.values())
 
-    # Attribution Analyst
+    # Analyst assignment
     analyst_role = created_roles["Analyst"]
     analyst_role.permissions = [
         created_perms["system:view"],
@@ -87,7 +87,7 @@ def init_roles_and_permissions(db):
         created_perms["audit:view"],
     ]
 
-    # Attribution Observer
+    # Observer assignment
     observer_role = created_roles["Observer"]
     observer_role.permissions = [
         created_perms["system:view"],
@@ -99,19 +99,19 @@ def init_roles_and_permissions(db):
 
 def init_admin(email: str, full_name: str, password: str):
     """
-    Initialisation protégée du premier administrateur :
-    - Vérifie que les migrations Alembic ont été appliquées (aucun create_all).
-    - Échoue immédiatement si un administrateur existe déjà.
-    - Valide la conformité de la politique de mot de passe.
-    - Hache avec Argon2id obligatoire.
-    - Enregistre l'événement d'audit.
+    Protected initialization of the first administrator:
+    - Verifies Alembic migrations have been applied (no create_all).
+    - Fails immediately if an administrator already exists.
+    - Validates password policy compliance.
+    - Hashes with mandatory Argon2id.
+    - Records the audit event.
     """
     check_database_migrated()
     db = SessionLocal()
     try:
         init_roles_and_permissions(db)
 
-        # Règle impérative 3.3 : impossibilité de recréer si un admin existe déjà
+        # Mandatory rule 3.3: prevent re-creation if an admin already exists
         admin_role = db.query(Role).filter(Role.name == "Administrator").first()
         existing_admin = (
             db.query(User)
@@ -120,17 +120,17 @@ def init_admin(email: str, full_name: str, password: str):
             .first()
         )
         if existing_admin:
-            print("[ERREUR SÉCURITÉ] Un administrateur existe déjà dans la base de données.")
-            print("Pour des raisons de sécurité, cette commande ne peut être exécutée qu'une seule fois.")
+            print("[SECURITY ERROR] An administrator already exists in the database.")
+            print("For security reasons, this command can only be executed once.")
             sys.exit(1)
 
-        # Vérification politique de mot de passe
+        # Password policy check
         is_valid, err = validate_password_strength(password)
         if not is_valid:
-            print(f"[ERREUR SÉCURITÉ] Mot de passe invalide : {err}")
+            print(f"[SECURITY ERROR] Invalid password: {err}")
             sys.exit(1)
 
-        # Création de l'administrateur
+        # Administrator creation
         admin_user = User(
             email=email.lower().strip(),
             full_name=full_name.strip(),
@@ -153,7 +153,7 @@ def init_admin(email: str, full_name: str, password: str):
             details={"email": admin_user.email, "role": "Administrator"},
         )
 
-        print(f"[SUCCÈS] Premier administrateur créé : {admin_user.email} (ID: {admin_user.id})")
+        print(f"[SUCCESS] First administrator created: {admin_user.email} (ID: {admin_user.id})")
     finally:
         db.close()
 
@@ -161,23 +161,23 @@ def init_admin(email: str, full_name: str, password: str):
 import getpass
 
 def main():
-    parser = argparse.ArgumentParser(description="Outil d'administration CLI OpenNDR V0.1")
+    parser = argparse.ArgumentParser(description="OpenNDR V0.1 CLI Administration Tool")
     subparsers = parser.add_subparsers(dest="command")
 
     for cmd_name in ["create-first-admin", "init-admin"]:
-        admin_parser = subparsers.add_parser(cmd_name, help="Initialiser de façon sécurisée le premier compte administrateur")
-        admin_parser.add_argument("--email", required=True, help="Adresse e-mail de l'administrateur")
-        admin_parser.add_argument("--full-name", required=True, help="Nom complet de l'administrateur")
-        admin_parser.add_argument("--password", required=False, default=None, help="Mot de passe robuste (invité si omis)")
+        admin_parser = subparsers.add_parser(cmd_name, help="Securely initialize the first administrator account")
+        admin_parser.add_argument("--email", required=True, help="Administrator email address")
+        admin_parser.add_argument("--full-name", required=True, help="Administrator full name")
+        admin_parser.add_argument("--password", required=False, default=None, help="Strong password (prompted if omitted)")
 
     args = parser.parse_args()
     if args.command in ["create-first-admin", "init-admin"]:
         password = args.password
         if not password:
-            password = getpass.getpass("Saisissez le mot de passe pour le premier administrateur : ")
-            confirm = getpass.getpass("Confirmez le mot de passe : ")
+            password = getpass.getpass("Enter password for the first administrator: ")
+            confirm = getpass.getpass("Confirm password: ")
             if password != confirm:
-                print("[ERREUR] Les deux mots de passe ne correspondent pas.")
+                print("[ERROR] Passwords do not match.")
                 sys.exit(1)
         init_admin(args.email, args.full_name, password)
     else:

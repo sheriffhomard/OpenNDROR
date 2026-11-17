@@ -1,9 +1,9 @@
 /**
- * OpenNDR V0.2 — Couche Client API HTTP Réelle
+ * OpenNDR V0.2 — Real HTTP API Client Layer
  *
- * Communication HTTP directe avec le backend FastAPI (/api/v1).
- * Aucune donnée simulée, aucun compte de démonstration en dur,
- * gestion stricte des jetons JWT et déconnexion automatique en cas d'invalidation.
+ * Direct HTTP communication with the FastAPI backend (/api/v1).
+ * No simulated data, no hardcoded demo accounts, strict JWT token handling,
+ * and automatic logout on token invalidation.
  */
 import { User, AuthSession, PermissionCode } from '../types/auth';
 import {
@@ -92,7 +92,7 @@ class ApiService {
       try {
         listener(this.currentUser);
       } catch (e) {
-        console.error('Erreur dans un auditeur auth:', e);
+        console.error('Error in auth listener:', e);
       }
     }
   }
@@ -143,30 +143,30 @@ class ApiService {
       });
     } catch (networkErr: unknown) {
       throw new ApiError(
-        'Impossible de contacter le serveur OpenNDR. Vérifiez que le backend FastAPI est démarré.',
+        'Unable to reach the OpenNDR server. Ensure the backend service is running.',
         0,
         networkErr
       );
     }
 
-    // Gestion de l'expiration ou de l'invalidation de session
+    // Handle session expiration or invalidation
     if (response.status === 401) {
       this.clearSession();
       throw new ApiError(
-        "Session expirée ou non autorisée. Veuillez vous authentifier à nouveau.",
+        'Session expired or unauthorized. Please sign in again.',
         401
       );
     }
 
     if (response.status === 403) {
       throw new ApiError(
-        "Accès refusé. Privilèges RBAC insuffisants pour exécuter cette opération.",
+        'Access denied. Insufficient RBAC privileges to perform this operation.',
         403
       );
     }
 
     if (!response.ok) {
-      let errDetail = `Erreur HTTP ${response.status}`;
+      let errDetail = `HTTP Error ${response.status}`;
       try {
         const errJson = await response.json();
         if (errJson && errJson.detail) {
@@ -178,7 +178,7 @@ class ApiService {
       throw new ApiError(errDetail, response.status);
     }
 
-    // Réponses 204 No Content
+    // 204 No Content responses
     if (response.status === 204) {
       return {} as T;
     }
@@ -186,7 +186,7 @@ class ApiService {
     try {
       return await response.json();
     } catch (jsonErr: unknown) {
-      throw new ApiError('Format de réponse backend invalide (JSON attendu).', response.status, jsonErr);
+      throw new ApiError('Invalid backend response format (expected JSON).', response.status, jsonErr);
     }
   }
 
@@ -465,8 +465,8 @@ class ApiService {
       rxDropped: item.rx_dropped,
       isStealthCompliant: item.is_stealth_compliant,
       complianceReason: item.is_stealth_compliant
-        ? 'Interface furtive conforme (Zéro IP & Promiscuous)'
-        : 'NON CONFORME : adresse IP détectée sur interface de capture passive',
+        ? 'Stealth interface compliant (Zero IP & Promiscuous)'
+        : 'NON-COMPLIANT: IP address detected on passive capture interface',
     }));
   }
 
@@ -515,7 +515,7 @@ class ApiService {
         id: String(entry.id),
         timestamp: entry.timestamp,
         userEmail: entry.user_email,
-        userRole: 'Utilisateur Audité',
+        userRole: 'Audited User',
         action: entry.action,
         resourceType: entry.resource_type,
         resourceId: entry.resource_id || '-',

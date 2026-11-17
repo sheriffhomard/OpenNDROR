@@ -50,7 +50,7 @@ def get_system_status(
             "admin": {
                 "name": settings.ADMIN_INTERFACE,
                 "role": "ADMINISTRATION",
-                "description": "Interface d'administration pour accès Web, API et PostgreSQL",
+                "description": "Management interface for Web, API, and PostgreSQL access",
             },
             "capture": {
                 "name": settings.CAPTURE_INTERFACE,
@@ -60,7 +60,7 @@ def get_system_status(
                 "details": isolation_check["details"],
                 "capture_engine_active": is_engine_running,
                 "capture_mode": capture_mode,
-                "notice": "Moteur réseau V0.2 opérationnel (AF_PACKET natif & décodage L2-L4).",
+                "notice": "V0.2 network engine operational (native AF_PACKET & L2-L4 decoding).",
             },
         },
         "storage": storage_metrics,
@@ -133,7 +133,7 @@ def ingest_pcap_trace(
     if not filepath:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le champ 'filepath' est obligatoire.",
+            detail="The 'filepath' field is required.",
         )
 
     try:
@@ -177,7 +177,7 @@ def upload_and_ingest_pcap(
     if not content_b64 or not isinstance(content_b64, str):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le champ 'content_base64' est obligatoire.",
+            detail="The 'content_base64' field is required.",
         )
 
     try:
@@ -185,7 +185,7 @@ def upload_and_ingest_pcap(
     except (binascii.Error, ValueError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Encodage Base64 invalide.",
+            detail="Invalid Base64 encoding.",
         )
 
     try:

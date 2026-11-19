@@ -94,7 +94,9 @@ apt-get install -y --no-install-recommends \
     git \
     iproute2 \
     ethtool \
-    libcap2-bin
+    libcap2-bin \
+    nodejs \
+    npm
 
 # Vérification Rust / Cargo
 if ! command -v cargo >/dev/null 2>&1; then
@@ -156,8 +158,10 @@ cp -r backend "$OPENNDR_DIR/"
 cp -r engine "$OPENNDR_DIR/"
 cp -r deployment "$OPENNDR_DIR/"
 cp -r src "$OPENNDR_DIR/"
+cp -r scripts "$OPENNDR_DIR/"
 cp -r public "$OPENNDR_DIR/" 2>/dev/null || true
 cp package.json tsconfig.json vite.config.ts index.html "$OPENNDR_DIR/"
+cp package-lock.json "$OPENNDR_DIR/" 2>/dev/null || true
 
 # ------------------------------------------------------------------------------
 # Étape 7 : PostgreSQL, Génération des Secrets & Fichier d'Environnement
@@ -184,10 +188,11 @@ if [ ! -f "$OPENNDR_CONF_DIR/backend.env" ]; then
 
     cat <<EOF > "$OPENNDR_CONF_DIR/backend.env"
 # ==============================================================================
-# OpenNDR V0.1 — Variables d'Environnement Backend (/etc/openndr/backend.env)
+# OpenNDR V0.2 — Variables d'Environnement Backend (/etc/openndr/backend.env)
 # ==============================================================================
 OPENNDR_ENV=production
 OPENNDR_LOG_LEVEL=INFO
+OPENNDR_RELEASE_DATE=$(date -u +%Y-%m-%d)
 
 API_HOST=127.0.0.1
 API_PORT=8000
@@ -216,7 +221,7 @@ fi
 if [ ! -f "$OPENNDR_CONF_DIR/openndr.conf" ]; then
     cp "$OPENNDR_DIR/deployment/configuration/openndr.conf.template" "$OPENNDR_CONF_DIR/openndr.conf"
     chown root:openndr "$OPENNDR_CONF_DIR/openndr.conf"
-    chmod 644 "$OPENNDR_CONF_DIR/openndr.conf"
+    chmod 640 "$OPENNDR_CONF_DIR/openndr.conf"
 fi
 
 # ------------------------------------------------------------------------------
@@ -246,7 +251,11 @@ log_success "Migrations Alembic appliquées avec succès. Schéma PostgreSQL à 
 log_info "8/10 - Compilation des assets de production Frontend (Vite)..."
 cd "$OPENNDR_DIR"
 if command -v npm >/dev/null 2>&1; then
-    npm ci --production=false || npm install
+    if [ -f package-lock.json ]; then
+        npm ci --include=dev
+    else
+        npm install --include=dev
+    fi
     npm run build
     chown -R openndr:openndr "$OPENNDR_DIR/dist"
     log_success "Frontend compilé avec succès dans $OPENNDR_DIR/dist."
@@ -265,13 +274,16 @@ ENGINE_BIN="$OPENNDR_DIR/engine/target/release/openndr-engine"
 
 if [ -f "$ENGINE_BIN" ]; then
     log_success "Binaire Rust compilé avec succès ($ENGINE_BIN)."
-    setcap cap_net_raw,cap_net_admin=eip "$ENGINE_BIN" || true
+    if ! setcap cap_net_raw,cap_net_admin=eip "$ENGINE_BIN"; then
+        log_error "Impossible d'appliquer les capabilities cap_net_raw,cap_net_admin à $ENGINE_BIN."
+        exit 1
+    fi
 else
     log_error "Échec de compilation du binaire Rust openndr-engine."
     exit 1
 fi
 
-# Configuration Nginx
+# Configuration Nginx (sert directement /opt/openndr/dist et proxyfie /api/)
 if [ -d /etc/nginx/sites-available ]; then
     cp "$OPENNDR_DIR/deployment/debian/nginx-openndr.conf" /etc/nginx/sites-available/openndr.conf
     ln -sf /etc/nginx/sites-available/openndr.conf /etc/nginx/sites-enabled/openndr.conf
@@ -281,16 +293,14 @@ if [ -d /etc/nginx/sites-available ]; then
     log_success "Nginx configuré pour servir le frontend et proxyfier l'API."
 fi
 
-# Installation des unités systemd
+# Installation des unités systemd (Backend FastAPI + Moteur Rust)
 if [ -d /etc/systemd/system ]; then
     cp "$OPENNDR_DIR/deployment/systemd/openndr-backend.service" /etc/systemd/system/
     cp "$OPENNDR_DIR/deployment/systemd/openndr-engine.service" /etc/systemd/system/
-    cp "$OPENNDR_DIR/deployment/systemd/openndr-web.service" /etc/systemd/system/
     systemctl daemon-reload
     systemctl enable openndr-backend.service
     systemctl enable openndr-engine.service
-    systemctl enable openndr-web.service
-    log_success "Unités systemd installées et activées."
+    log_success "Unités systemd installées et activées (openndr-backend, openndr-engine)."
 fi
 
 # Lien symbolique vers openndr-admin dans /usr/local/bin
@@ -300,7 +310,7 @@ ln -sf "$OPENNDR_DIR/backend/.venv/bin/openndr-admin" /usr/local/bin/openndr-adm
 # Résumé final
 # ------------------------------------------------------------------------------
 echo "======================================================================"
-log_success "Installation complète et vérifiée d'OpenNDR V0.1 terminée !"
+log_success "Installation complète et vérifiée d'OpenNDR V0.2 terminée !"
 echo "======================================================================"
 echo ""
 echo "Prochaines étapes de mise en service :"

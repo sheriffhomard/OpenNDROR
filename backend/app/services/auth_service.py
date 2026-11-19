@@ -26,9 +26,9 @@ class AuthService:
         ip_address: str = "127.0.0.1",
     ) -> Tuple[User, str]:
         """
-        Authentifie l'utilisateur contre la base PostgreSQL.
-        Gère la migration transparente vers Argon2id si l'ancien hachage était PBKDF2.
-        Rejette toute tentative si le compte est inactif ou inexistant.
+        Authenticates user against PostgreSQL using mandatory Argon2id verification.
+        Triggers transparent rehash if Argon2id cost parameters are upgraded.
+        Rejects inactive or nonexistent accounts.
         """
         user = db.query(User).filter(User.email == email.lower().strip()).first()
         if not user:

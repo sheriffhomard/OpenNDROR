@@ -15,15 +15,20 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
   - Nouvelle identité visuelle sobre et lisible (thème **Clair** `#f3f4f6` / `#ffffff` et thème **Sombre** `#111318` / `#181b20`) avec bibliothèque de composants UI unifiés (`PageHeader`, `SectionCard`, `StatusBadge`, `StateBlocks`, `DataTable`, `ConfirmDialog`).
   - Élimination de toute valeur de repli fictive (`eth0`/`eth1` codés en dur, versions/dates statiques, `'Audited User'`, compteurs factices) : affichage explicite des états réels (`Opérationnel`, `En fonctionnement dégradé`, `Arrêté`, `Indisponible`, `Non configuré`, `Inconnu`, `Aucune donnée de capture disponible`).
   - Filtrage RBAC effectif du menu selon les permissions de l'utilisateur connecté et invalidation immédiate des données obsolètes si le serveur devient inaccessible.
-- **Paramètres Système & Mises à Jour Automatiques en Arrière-Plan** :
-  - Réorganisation stricte de **Paramètres système** en 5 catégories (*Système*, *Mises à jour*, *Affichage*, *Préférences utilisateur*, *Informations légales*), avec confirmation avant mise à jour forcée et installation PWA intégrée.
-  - Routes `/api/v1/system/updates*` et planificateur serveur `setInterval` couplé au Service Worker PWA `registerType: 'autoUpdate'`.
+- **Paramètres Système & Mises à Jour Persistées en Base** :
+  - Réorganisation stricte de **Paramètres système** en 5 catégories (*Système*, *Mises à jour*, *Affichage*, *Préférences utilisateur*, *Informations légales*), avec confirmation avant mise à jour forcée, contrôles RBAC (`system:manage`) et installation PWA intégrée.
+  - Endpoints FastAPI `/api/v1/system/updates*` persistés dans PostgreSQL (`system_settings`) couplés au Service Worker PWA `registerType: 'autoUpdate'`.
+- **Durcissement Sécurité, Fiabilité & Suppression Définitive du Prototypage (Correctifs Audit)** :
+  - Suppression définitive du serveur Express de démonstration (`server.ts`), des dépendances Express inutiles et de l'unité obsolète `openndr-web.service` (Nginx sert directement `/opt/openndr/dist` et proxyfie `/api/` vers FastAPI).
+  - Suppression de tout repli PBKDF2 et de tout jeu `REVOKED_TOKENS` en mémoire : Argon2id exclusif, `SECRET_KEY` obligatoire sans valeur par défaut, validation JWT et révocation **fail-closed** (`DatabaseSecurityError` / HTTP 503) en tout environnement.
+  - Suppression de `Base.metadata.create_all()` au démarrage FastAPI : schéma gouverné exclusivement par Alembic + migration `002_nullable_interface_metrics` permettant `null` pour les métriques matérielles non collectables (`mac_address`, `mtu`, `speed_mbps`, `rx_dropped`).
+  - Suppression des états factices du moteur Rust et des adresses MAC/MTU fictives : sonde IPC UNIX réelle, vérification d'écriture réelle sur le répertoire PCAP et vérification complète IPv4/IPv6/routes de l'interface passive.
 - **Onboarding Légal, Logo & Application Installable (PWA)** :
   - **Modale d'Onboarding Légal** au premier démarrage précisant que **l'auteur n'est pas responsable des données fournies, importées ou traitées dans l'application**.
-  - Logo vectoriel officiel (`/public/icon.svg`, `/public/icon-maskable.svg`, `<AppLogo />`), icônes PWA et bouton **Installer l'application**.
+  - Logo vectoriel officiel (`/public/icon.svg`, `/public/icon-maskable.svg`, `<AppLogo />`), script CSP-strict `/public/theme-init.js`, icônes PWA et bouton **Installer l'application**.
 - **Tests Automatisés & Documentation** :
-  - Ajout de `scripts/verify-ui.mts` à `npm test` pour vérifier par rendu réel les garde-fous RBAC, les états d'erreur/indisponibilité et l'absence de données fictives.
-  - Captures d'écran actualisées dans `docs/screenshots/` et mise à jour de `README.md`, `CONTEXT.md` et `CHANGELOG.md`.
+  - Extension de `scripts/verify-frontend.mjs`, ajout de `scripts/test-anti-mock.mjs` et enrichissement de `scripts/verify-ui.mts` (5 états moteur, valeurs `null`, diagnostics non exécutés, restrictions RBAC Observer).
+  - Captures d'écran actualisées dans `docs/screenshots/` et mise à jour de `README.md`, `CONTEXT.md`, `CHANGELOG.md` et `docs/*.md`.
 
 ## [0.1.0] - 2026-11-06
 

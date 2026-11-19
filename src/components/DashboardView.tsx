@@ -85,6 +85,23 @@ function formatTime(iso: string | null): string {
   }
 }
 
+function mapEngineOperationalStatus(status?: string | null): OperationalState | null {
+  switch (status?.toUpperCase()) {
+    case 'OPERATIONAL':
+      return 'operational';
+    case 'DEGRADED':
+      return 'degraded';
+    case 'STOPPED':
+      return 'stopped';
+    case 'UNAVAILABLE':
+      return 'unavailable';
+    case 'UNKNOWN':
+      return 'unknown';
+    default:
+      return null;
+  }
+}
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   isAuthenticated,
   connectionState,
@@ -131,18 +148,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ? 'unavailable'
       : 'unknown';
 
-  const rustEngineState: OperationalState =
-    connectionState === 'unavailable'
-      ? 'unavailable'
-      : updateState?.engine_integrity_ok === false && !telemetry?.is_running
-      ? 'degraded'
-      : engineService?.status === 'active' || telemetry?.is_running
-      ? 'operational'
-      : engineService?.status === 'ready' || health?.capture_engine
-      ? telemetry?.socket_error
-        ? 'degraded'
-        : 'operational'
-      : 'unknown';
+  const rustEngineState: OperationalState = (() => {
+    if (connectionState === 'unavailable') return 'unavailable';
+
+    const rawStatus = telemetry?.engine_status ?? health?.capture_engine?.engine_status;
+    const mappedStatus = mapEngineOperationalStatus(rawStatus);
+    const binaryMissing =
+      telemetry?.binary_present === false ||
+      health?.capture_engine?.binary_present === false ||
+      updateState?.engine_integrity_ok === false;
+    const ipcExplicitlyDown =
+      telemetry?.ipc_reachable === false ||
+      health?.capture_engine?.ipc_reachable === false;
+    const hasEngineError = Boolean(
+      telemetry?.ipc_error ||
+        telemetry?.socket_error ||
+        health?.capture_engine?.ipc_error
+    );
+
+    if (mappedStatus) {
+      if (mappedStatus === 'operational' && (binaryMissing || ipcExplicitlyDown || hasEngineError)) {
+        return 'degraded';
+      }
+      return mappedStatus;
+    }
+
+    const svcStatus = engineService?.status?.toUpperCase();
+    if (binaryMissing) {
+      return telemetry?.is_running ? 'degraded' : 'unavailable';
+    }
+    if (hasEngineError || svcStatus === 'FAILED') {
+      return 'degraded';
+    }
+    if (
+      telemetry?.is_running ||
+      ((svcStatus === 'ACTIVE' || svcStatus === 'READY') &&
+        (telemetry?.ipc_reachable === true || health?.capture_engine?.ipc_reachable === true))
+    ) {
+      return 'operational';
+    }
+    if (svcStatus === 'INACTIVE' || svcStatus === 'STOPPED') {
+      return 'stopped';
+    }
+    if (svcStatus === 'NOT_FOUND') {
+      return 'unavailable';
+    }
+    if (ipcExplicitlyDown) {
+      return 'unavailable';
+    }
+    return 'unknown';
+  })();
 
   const captureServiceState: OperationalState =
     connectionState === 'unavailable'
@@ -153,6 +208,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ? 'unavailable'
       : telemetry.is_running
       ? 'operational'
+      : telemetry.ipc_reachable === false
+      ? 'unavailable'
       : 'stopped';
 
   const adminIfaceState: OperationalState =
@@ -188,13 +245,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ? 'unknown'
       : !storage
       ? 'unavailable'
-      : storage.status === 'READY'
+      : storage.status === 'READY' && storage.isWritable !== false
       ? 'operational'
       : storage.status === 'NOT_CREATED'
       ? 'unconfigured'
-      : storage.status === 'PERMISSION_DENIED'
+      : storage.status === 'PERMISSION_DENIED' ||
+        storage.status === 'READ_ONLY' ||
+        storage.isWritable === false
       ? 'degraded'
       : 'unknown';
+
+  const engineBinaryMissing =
+    telemetry?.binary_present === false ||
+    health?.capture_engine?.binary_present === false ||
+    updateState?.engine_integrity_ok === false;
+  const engineIpcErr =
+    telemetry?.ipc_error || telemetry?.socket_error || health?.capture_engine?.ipc_error;
 
   const systemRows: {
     component: string;
@@ -219,11 +285,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     {
       component: 'Moteur Rust',
       state: rustEngineState,
-      detail: telemetry?.engine_version
-        ? `Version ${telemetry.engine_version}${updateState?.engine_integrity_ok === false ? ' · Binaire natif absent sur cet hôte' : ''}`
-        : updateState?.engine_integrity_ok === false
+      detail: engineBinaryMissing
         ? 'Binaire openndr-engine absent sur cet hôte'
-        : health?.capture_engine?.notice || 'Non disponible',
+        : engineIpcErr
+        ? `IPC moteur indisponible : ${engineIpcErr}`
+        : rustEngineState === 'stopped'
+        ? 'Service openndr-engine arrêté ou en attente de démarrage'
+        : telemetry?.engine_version
+        ? `Version ${telemetry.engine_version}`
+        : health?.capture_engine?.version
+        ? `Version ${health.capture_engine.version}`
+        : health?.capture_engine?.notice || 'État non confirmé',
     },
     {
       component: 'Service de capture',
@@ -231,9 +303,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       detail: !isAuthenticated
         ? 'Authentification requise'
         : telemetry
-        ? telemetry.is_running
-          ? `Capture active (${telemetry.capture_mode})`
-          : `En veille (${telemetry.capture_mode})`
+        ? telemetry.ipc_reachable === false
+          ? telemetry.ipc_error || 'Socket IPC moteur non joignable'
+          : telemetry.is_running
+          ? `Capture active (${telemetry.capture_mode || 'LIVE'})`
+          : `En veille (${telemetry.capture_mode || 'STANDBY'})`
         : 'Non disponible',
     },
     {
@@ -262,7 +336,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       detail: !isAuthenticated
         ? 'Authentification requise'
         : storage
-        ? `${storage.pcapDirectory} (${storage.status || 'Inconnu'})`
+        ? `${storage.pcapDirectory} (${storage.status || 'Inconnu'}${storage.isWritable === false ? ' · non accessible en écriture' : ''})`
         : 'Non disponible',
     },
   ];
@@ -270,7 +344,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // --- Network metrics availability ---
   const hasCaptureActivity =
     telemetry !== null &&
-    (telemetry.is_running || telemetry.packets_received > 0 || telemetry.bytes_processed > 0);
+    (telemetry.is_running ||
+      (telemetry.packets_received ?? 0) > 0 ||
+      (telemetry.bytes_processed ?? 0) > 0);
 
   // --- First-use 6-step setup guide ---
   const stepServer: GuideStepState =
@@ -308,10 +384,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const stepEngine: GuideStepState =
     connectionState === 'unavailable'
       ? 'unverifiable'
-      : updateState?.engine_integrity_ok === false
-      ? 'failed'
-      : health?.capture_engine?.version
+      : rustEngineState === 'operational'
       ? 'passed'
+      : rustEngineState === 'degraded' || rustEngineState === 'unavailable'
+      ? 'failed'
+      : rustEngineState === 'stopped'
+      ? 'todo'
       : 'unverifiable';
 
   const stepCapture: GuideStepState =
@@ -361,9 +439,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       label: 'Vérifier le moteur Rust',
       state: stepEngine,
       detail:
-        updateState?.engine_integrity_ok === false
-          ? 'Binaire openndr-engine non compilé sur cet hôte.'
-          : 'Moteur déclaré par l\'API.',
+        rustEngineState === 'operational'
+          ? 'Binaire présent et IPC moteur joignable.'
+          : engineBinaryMissing
+          ? 'Binaire openndr-engine absent ou non compilé sur cet hôte.'
+          : engineIpcErr
+          ? `Erreur IPC moteur : ${engineIpcErr}`
+          : rustEngineState === 'stopped'
+          ? 'Service openndr-engine arrêté.'
+          : 'État réel du moteur non confirmé.',
     },
     {
       id: 6,
@@ -519,37 +603,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                 <div className="text-gray-500 dark:text-gray-400">État de la capture</div>
                 <div className="mt-1 font-semibold text-gray-900 dark:text-gray-100 font-mono">
-                  {telemetry.is_running ? `ACTIVE (${telemetry.capture_mode})` : telemetry.capture_mode}
+                  {telemetry.is_running
+                    ? `ACTIVE (${telemetry.capture_mode || 'LIVE'})`
+                    : telemetry.capture_mode || 'INDISPONIBLE'}
                 </div>
               </div>
               <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                 <div className="text-gray-500 dark:text-gray-400">Paquets reçus</div>
                 <div className="mt-1 text-base font-semibold font-mono tabular-nums text-gray-900 dark:text-gray-100">
-                  {telemetry.packets_received.toLocaleString('fr-FR')}
+                  {telemetry.packets_received !== null
+                    ? telemetry.packets_received.toLocaleString('fr-FR')
+                    : 'Non disponible'}
                 </div>
               </div>
               <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                 <div className="text-gray-500 dark:text-gray-400">Débit réseau</div>
                 <div className="mt-1 text-base font-semibold font-mono tabular-nums text-gray-900 dark:text-gray-100">
-                  {telemetry.current_mbps.toFixed(3)} Mbps
+                  {telemetry.current_mbps !== null
+                    ? `${telemetry.current_mbps.toFixed(3)} Mbps`
+                    : 'Non disponible'}
                 </div>
               </div>
               <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                 <div className="text-gray-500 dark:text-gray-400">Paquets perdus</div>
                 <div className="mt-1 text-base font-semibold font-mono tabular-nums text-gray-900 dark:text-gray-100">
-                  {telemetry.packets_dropped.toLocaleString('fr-FR')}
+                  {telemetry.packets_dropped !== null
+                    ? telemetry.packets_dropped.toLocaleString('fr-FR')
+                    : 'Non disponible'}
                 </div>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-gray-200 dark:border-[#2c313a] text-xs flex flex-wrap items-center gap-4 font-mono tabular-nums text-gray-600 dark:text-gray-400">
-              <span>TCP : {telemetry.protocol_stats.tcp_packets.toLocaleString('fr-FR')}</span>
-              <span>UDP : {telemetry.protocol_stats.udp_packets.toLocaleString('fr-FR')}</span>
-              <span>ICMP : {telemetry.protocol_stats.icmp_packets.toLocaleString('fr-FR')}</span>
-              <span>ARP : {telemetry.protocol_stats.arp_packets.toLocaleString('fr-FR')}</span>
-              <span>IPv4 : {telemetry.protocol_stats.ipv4_packets.toLocaleString('fr-FR')}</span>
-              <span>IPv6 : {telemetry.protocol_stats.ipv6_packets.toLocaleString('fr-FR')}</span>
-            </div>
+            {telemetry.protocol_stats ? (
+              <div className="pt-2 border-t border-gray-200 dark:border-[#2c313a] text-xs flex flex-wrap items-center gap-4 font-mono tabular-nums text-gray-600 dark:text-gray-400">
+                <span>TCP : {telemetry.protocol_stats.tcp_packets.toLocaleString('fr-FR')}</span>
+                <span>UDP : {telemetry.protocol_stats.udp_packets.toLocaleString('fr-FR')}</span>
+                <span>ICMP : {telemetry.protocol_stats.icmp_packets.toLocaleString('fr-FR')}</span>
+                <span>ARP : {telemetry.protocol_stats.arp_packets.toLocaleString('fr-FR')}</span>
+                <span>IPv4 : {telemetry.protocol_stats.ipv4_packets.toLocaleString('fr-FR')}</span>
+                <span>IPv6 : {telemetry.protocol_stats.ipv6_packets.toLocaleString('fr-FR')}</span>
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-gray-200 dark:border-[#2c313a] text-xs text-gray-500 dark:text-gray-400">
+                Répartition protocolaire non disponible.
+              </div>
+            )}
           </div>
         )}
       </SectionCard>
@@ -665,7 +763,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="py-2.5 flex items-center justify-between gap-4">
                 <dt className="text-gray-500 dark:text-gray-400">Espace utilisé</dt>
                 <dd className="font-mono tabular-nums text-gray-900 dark:text-gray-100">
-                  {storage.usedStorageGb} Go
+                  {storage.usedStorageGb !== null && storage.usedStorageGb !== undefined
+                    ? `${storage.usedStorageGb} Go`
+                    : 'Indisponible'}
                 </dd>
               </div>
               <div className="py-2.5 flex items-center justify-between gap-4">

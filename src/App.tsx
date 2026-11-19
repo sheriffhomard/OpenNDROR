@@ -20,6 +20,7 @@ import {
   PlatformHealth,
   SystemService,
   NetworkInterfaceConfig,
+  IsolationCheckResult,
   StorageMetrics,
   AuditLogItem,
   EngineTelemetry,
@@ -59,6 +60,7 @@ export default function App() {
   const [health, setHealth] = useState<PlatformHealth | null>(null);
   const [services, setServices] = useState<SystemService[]>([]);
   const [interfaces, setInterfaces] = useState<NetworkInterfaceConfig[]>([]);
+  const [isolationCheck, setIsolationCheck] = useState<IsolationCheckResult | null>(null);
   const [storage, setStorage] = useState<StorageMetrics | null>(null);
   const [telemetry, setTelemetry] = useState<EngineTelemetry | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -129,6 +131,7 @@ export default function App() {
   const clearOperationalData = useCallback(() => {
     setServices([]);
     setInterfaces([]);
+    setIsolationCheck(null);
     setStorage(null);
     setTelemetry(null);
     setUsers([]);
@@ -185,10 +188,11 @@ export default function App() {
       return;
     }
 
-    const [statusRes, telemetryRes, interfacesRes, storageRes] = await Promise.allSettled([
+    const [statusRes, telemetryRes, interfacesRes, isolationRes, storageRes] = await Promise.allSettled([
       apiService.getSystemStatus(),
       apiService.getCaptureTelemetry(),
       apiService.getInterfaces(),
+      apiService.getIsolationCheck(),
       apiService.getStorageMetrics(),
     ]);
 
@@ -225,6 +229,12 @@ export default function App() {
       setInterfacesError(
         extractErrorMessage(interfacesRes.reason, 'Impossible de charger les interfaces réseau.')
       );
+    }
+
+    if (isolationRes.status === 'fulfilled') {
+      setIsolationCheck(isolationRes.value);
+    } else {
+      setIsolationCheck(null);
     }
 
     if (storageRes.status === 'fulfilled') {
@@ -523,6 +533,7 @@ export default function App() {
           {activeSection === 'interfaces' && (
             <InterfacesView
               interfaces={interfaces}
+              isolationCheck={isolationCheck}
               interfacesError={interfacesError}
               onRefresh={refreshData}
             />
@@ -560,6 +571,8 @@ export default function App() {
             <SystemSettingsView
               health={health}
               updateState={updateState}
+              isAuthenticated={Boolean(currentUser)}
+              canManageUpdates={apiService.hasPermission('system:manage')}
               isLoadingUpdates={isRefreshing}
               updatesError={updatesError}
               onRetryUpdates={refreshData}

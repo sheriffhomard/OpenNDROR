@@ -38,12 +38,15 @@ jobs:
           pip install -e backend/
       - name: Run Ruff Linter
         run: ruff check backend/
-      - name: Run Alembic Migrations on PostgreSQL
+      - name: Run Alembic Migrations Roundtrip on PostgreSQL
         env:
           DATABASE_URL: postgresql+psycopg2://openndr_test_user:openndr_test_password@localhost:5432/openndr_test
           OPENNDR_ENV: development
+          SECRET_KEY: test_secret_key_minimum_32_characters_for_ci_checks
         run: |
           cd backend
+          alembic upgrade head
+          alembic downgrade base
           alembic upgrade head
       - name: Run Automated Backend & Security Tests
         env:
@@ -54,7 +57,7 @@ jobs:
           PYTHONPATH=backend python -m pytest backend/tests -v
 
   frontend-checks:
-    name: Frontend React (TypeScript & Vite)
+    name: Frontend React (TypeScript, Anti-Mock & Vite)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +66,14 @@ jobs:
         with:
           node-version: 20
       - name: Install npm dependencies
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+      - name: Anti-Prototype, SSR UI & TypeScript Checks
+        run: npm test
       - name: TypeScript / Lint Checks
         run: npm run lint
       - name: Vite Production Build
@@ -93,6 +103,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Absence of Demo / Obsolete Artifacts
+        run: |
+          test ! -f server.ts
+          test ! -f deployment/systemd/openndr-web.service
       - name: Validate Shell Syntax
         run: |
           bash -n deployment/debian/check-prerequisites.sh

@@ -1,22 +1,33 @@
+import os
 import unittest
-from app.core.security import create_access_token, decode_token
+
+os.environ.setdefault("OPENNDR_ENV", "development")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-unit-tests-only-min-32-chars!!")
 
 
-class TestRBACV01(unittest.TestCase):
+class TestRBACV02(unittest.TestCase):
     def setUp(self):
         self.roles_permissions = {
             "Administrator": [
-                "system:view", "system:manage",
-                "interfaces:view", "interfaces:manage",
-                "users:view", "users:manage",
-                "audit:view", "storage:manage"
+                "system:view",
+                "system:manage",
+                "interfaces:view",
+                "interfaces:manage",
+                "users:view",
+                "users:manage",
+                "audit:view",
+                "storage:manage",
             ],
             "Analyst": [
-                "system:view", "interfaces:view", "users:view", "audit:view"
+                "system:view",
+                "interfaces:view",
+                "users:view",
+                "audit:view",
             ],
             "Observer": [
-                "system:view", "interfaces:view"
-            ]
+                "system:view",
+                "interfaces:view",
+            ],
         }
 
     def test_administrator_has_all_permissions(self):
@@ -38,6 +49,8 @@ class TestRBACV01(unittest.TestCase):
         self.assertIn("system:view", observer_perms)
         self.assertNotIn("audit:view", observer_perms)
         self.assertNotIn("users:manage", observer_perms)
+        self.assertNotIn("system:manage", observer_perms)
+        self.assertNotIn("interfaces:manage", observer_perms)
 
 
 if __name__ == "__main__":

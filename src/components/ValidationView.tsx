@@ -255,19 +255,28 @@ export const ValidationView: React.FC<ValidationViewProps> = ({ isAuthenticated 
       appendLog(`[ÉCHEC] Rejet identifiants (${dur} ms) : ${msg}`);
     }
 
-    // 6. Rust engine telemetry + binary integrity check
+    // 6. Rust engine telemetry + binary integrity + IPC check
     updateTest('probe-engine-telemetry', { status: 'running' });
     const t5 = performance.now();
     if (!isAuthenticated) {
       try {
-        const upd = await apiService.getUpdateStatus();
+        const [healthRes, upd] = await Promise.all([
+          apiService.getHealth(),
+          apiService.getUpdateStatus().catch(() => null),
+        ]);
         const dur = Math.round(performance.now() - t5);
+        const binaryOk =
+          healthRes.capture_engine?.binary_present !== false &&
+          upd?.engine_integrity_ok !== false;
+        const ipcOk = healthRes.capture_engine?.ipc_reachable === true;
         updateTest('probe-engine-telemetry', {
-          status: 'warning',
+          status: binaryOk && !ipcOk ? 'warning' : !binaryOk ? 'failed' : 'warning',
           durationMs: dur,
-          details: upd.engine_integrity_ok
-            ? 'Binaire détecté, mais authentification requise pour lire la télémétrie.'
-            : 'Binaire Rust non compilé dans cet environnement (authentification requise pour la télémétrie).',
+          details: !binaryOk
+            ? 'Binaire openndr-engine absent ou non compilé sur cet hôte.'
+            : ipcOk
+            ? 'Binaire et IPC détectés, mais authentification requise pour lire la télémétrie complète.'
+            : 'Binaire détecté, mais IPC moteur non joignable (authentification requise pour le détail).',
         });
         appendLog(`[AVERT.] Moteur Rust (${dur} ms) : connexion utilisateur requise pour télémétrie`);
       } catch (err: unknown) {
@@ -278,25 +287,58 @@ export const ValidationView: React.FC<ValidationViewProps> = ({ isAuthenticated 
       }
     } else {
       try {
-        const [telem, upd] = await Promise.all([
+        const [healthRes, telem, upd] = await Promise.all([
+          apiService.getHealth(),
           apiService.getCaptureTelemetry(),
           apiService.getUpdateStatus().catch(() => null),
         ]);
         const dur = Math.round(performance.now() - t5);
-        if (upd && !upd.engine_integrity_ok) {
+        const binaryMissing =
+          telem.binary_present === false ||
+          healthRes.capture_engine?.binary_present === false ||
+          upd?.engine_integrity_ok === false;
+        const ipcUnreachable =
+          telem.ipc_reachable === false ||
+          healthRes.capture_engine?.ipc_reachable === false ||
+          Boolean(telem.ipc_error || telem.socket_error);
+        const engineStatus = (
+          telem.engine_status ||
+          healthRes.capture_engine?.engine_status ||
+          'UNKNOWN'
+        ).toUpperCase();
+
+        if (binaryMissing) {
+          updateTest('probe-engine-telemetry', {
+            status: 'failed',
+            durationMs: dur,
+            details: 'Binaire natif openndr-engine absent sur cet hôte.',
+          });
+          appendLog(`[ÉCHEC] Moteur Rust (${dur} ms) : binaire natif absent`);
+        } else if (ipcUnreachable) {
+          updateTest('probe-engine-telemetry', {
+            status: engineStatus === 'STOPPED' ? 'warning' : 'failed',
+            durationMs: dur,
+            details:
+              telem.ipc_error ||
+              telem.socket_error ||
+              healthRes.capture_engine?.ipc_error ||
+              `IPC moteur non joignable (statut : ${engineStatus}).`,
+          });
+          appendLog(`[ÉCHEC] Moteur Rust (${dur} ms) : IPC non joignable (${engineStatus})`);
+        } else if (engineStatus !== 'OPERATIONAL') {
           updateTest('probe-engine-telemetry', {
             status: 'warning',
             durationMs: dur,
-            details: `API télémétrie joignable (v${telem.engine_version}), mais binaire natif absent sur cet hôte.`,
+            details: `Statut moteur : ${engineStatus} (${telem.capture_mode || 'N/A'})`,
           });
-          appendLog(`[AVERT.] Moteur Rust (${dur} ms) : binaire natif non compilé localement`);
+          appendLog(`[AVERT.] Moteur Rust (${dur} ms) : statut=${engineStatus}`);
         } else {
           updateTest('probe-engine-telemetry', {
             status: 'passed',
             durationMs: dur,
-            details: `Moteur v${telem.engine_version} (${telem.capture_mode}) · ${telem.packets_received} paquet(s) reçu(s).`,
+            details: `Moteur v${telem.engine_version || '0.2.0'} (${telem.capture_mode || 'STANDBY'}) · ${telem.packets_received ?? 0} paquet(s) reçu(s).`,
           });
-          appendLog(`[OK] Moteur Rust (${dur} ms) : mode=${telem.capture_mode}, paquets=${telem.packets_received}`);
+          appendLog(`[OK] Moteur Rust (${dur} ms) : mode=${telem.capture_mode}, paquets=${telem.packets_received ?? 0}`);
         }
       } catch (err: unknown) {
         const dur = Math.round(performance.now() - t5);
@@ -319,20 +361,28 @@ export const ValidationView: React.FC<ValidationViewProps> = ({ isAuthenticated 
       try {
         const isolationRes = await apiService.getIsolationCheck();
         const dur = Math.round(performance.now() - t6);
-        if (isolationRes.is_isolated) {
+        const captureReady = isolationRes.observed_state?.capture_ready ?? true;
+        if (isolationRes.is_isolated && captureReady) {
           updateTest('probe-stealth-check', {
             status: 'passed',
             durationMs: dur,
-            details: `Interface ${isolationRes.interface} conforme (${isolationRes.status})`,
+            details: `Interface ${isolationRes.interface} conforme et prête pour la capture (${isolationRes.status})`,
           });
           appendLog(`[OK] Isolation passive (${dur} ms) : ${isolationRes.details}`);
+        } else if (isolationRes.is_isolated && !captureReady) {
+          updateTest('probe-stealth-check', {
+            status: 'warning',
+            durationMs: dur,
+            details: `Interface ${isolationRes.interface} isolée sans IP, mais capture non prête : ${isolationRes.details}`,
+          });
+          appendLog(`[AVERT.] Isolation passive (${dur} ms) : ${isolationRes.details}`);
         } else {
           updateTest('probe-stealth-check', {
             status: isolationRes.status === 'NOT_CONFIGURED' ? 'warning' : 'failed',
             durationMs: dur,
             details: `${isolationRes.status} : ${isolationRes.details}`,
           });
-          appendLog(`[AVERT.] Isolation passive (${dur} ms) : ${isolationRes.status} — ${isolationRes.details}`);
+          appendLog(`[${isolationRes.status === 'NOT_CONFIGURED' ? 'AVERT.' : 'ÉCHEC'}] Isolation passive (${dur} ms) : ${isolationRes.status} — ${isolationRes.details}`);
         }
       } catch (err: unknown) {
         const dur = Math.round(performance.now() - t6);
@@ -342,7 +392,7 @@ export const ValidationView: React.FC<ValidationViewProps> = ({ isAuthenticated 
       }
     }
 
-    // 8. PCAP storage readiness
+    // 8. PCAP storage readiness & real writability
     updateTest('probe-storage-quota', { status: 'running' });
     const t7 = performance.now();
     if (!isAuthenticated) {
@@ -355,13 +405,18 @@ export const ValidationView: React.FC<ValidationViewProps> = ({ isAuthenticated 
       try {
         const storageRes = await apiService.getStorageMetrics();
         const dur = Math.round(performance.now() - t7);
-        const ready = storageRes.status === 'READY';
+        const writable = storageRes.isWritable ?? storageRes.pcap_storage?.is_writable ?? false;
+        const ready = storageRes.status === 'READY' && writable;
+        const isHardFailure =
+          storageRes.status === 'PERMISSION_DENIED' ||
+          storageRes.status === 'READ_ONLY' ||
+          (storageRes.status === 'READY' && !writable);
         updateTest('probe-storage-quota', {
-          status: ready ? 'passed' : 'warning',
+          status: ready ? 'passed' : isHardFailure ? 'failed' : 'warning',
           durationMs: dur,
-          details: `${storageRes.pcapDirectory} · Statut : ${storageRes.status || 'Inconnu'} · Quota ${storageRes.maxStorageGb} Go`,
+          details: `${storageRes.pcapDirectory} · Statut : ${storageRes.status || 'Inconnu'} · Écriture : ${writable ? 'OK' : storageRes.writeError || 'Refusée'} · Quota ${storageRes.maxStorageGb} Go`,
         });
-        appendLog(`[${ready ? 'OK' : 'AVERT.'}] Stockage PCAP (${dur} ms) : statut=${storageRes.status}`);
+        appendLog(`[${ready ? 'OK' : isHardFailure ? 'ÉCHEC' : 'AVERT.'}] Stockage PCAP (${dur} ms) : statut=${storageRes.status}, writable=${writable}`);
       } catch (err: unknown) {
         const dur = Math.round(performance.now() - t7);
         const msg = err instanceof Error ? err.message : String(err);

@@ -86,14 +86,15 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isRunning = telemetry?.is_running ?? false;
-  const stats = lastIngestion?.protocol_stats || telemetry?.protocol_stats || EMPTY_PROTOCOL_STATS;
+  const stats: ProtocolStats | null =
+    lastIngestion?.protocol_stats || telemetry?.protocol_stats || null;
 
   const hasCapturedData =
     lastIngestion !== null ||
     (telemetry !== null &&
       (telemetry.is_running ||
-        telemetry.packets_received > 0 ||
-        telemetry.bytes_processed > 0 ||
+        (telemetry.packets_received ?? 0) > 0 ||
+        (telemetry.bytes_processed ?? 0) > 0 ||
         (telemetry.recent_packets?.length ?? 0) > 0));
 
   const displayedPackets: PacketSummary[] = useMemo(() => {
@@ -127,17 +128,23 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
     });
   }, [displayedPackets, protocolFilter, searchQuery]);
 
+  const effectiveStats = stats || EMPTY_PROTOCOL_STATS;
+
   const totalTransportOrL2 = Math.max(
     1,
-    stats.tcp_packets + stats.udp_packets + stats.icmp_packets + stats.arp_packets + stats.other_packets
+    effectiveStats.tcp_packets +
+      effectiveStats.udp_packets +
+      effectiveStats.icmp_packets +
+      effectiveStats.arp_packets +
+      effectiveStats.other_packets
   );
 
   const protocolBreakdown = [
-    { label: 'TCP', count: stats.tcp_packets },
-    { label: 'UDP', count: stats.udp_packets },
-    { label: 'ICMP', count: stats.icmp_packets },
-    { label: 'ARP', count: stats.arp_packets },
-    { label: 'Autres', count: stats.other_packets },
+    { label: 'TCP', count: effectiveStats.tcp_packets },
+    { label: 'UDP', count: effectiveStats.udp_packets },
+    { label: 'ICMP', count: effectiveStats.icmp_packets },
+    { label: 'ARP', count: effectiveStats.arp_packets },
+    { label: 'Autres', count: effectiveStats.other_packets },
   ];
 
   const handleStartCapture = async () => {
@@ -216,8 +223,33 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
     }
   };
 
-  const engineState =
-    telemetry === null ? 'unavailable' : telemetry.is_running ? 'operational' : 'stopped';
+  const engineBadge = (() => {
+    if (telemetry === null) {
+      return { state: 'unavailable' as const, label: 'Indisponible' };
+    }
+    const raw = telemetry.engine_status?.toUpperCase();
+    if (raw === 'UNAVAILABLE') {
+      return { state: 'unavailable' as const, label: 'Indisponible' };
+    }
+    if (raw === 'DEGRADED' || telemetry.ipc_error || telemetry.socket_error) {
+      return { state: 'degraded' as const, label: 'En fonctionnement dégradé' };
+    }
+    if (raw === 'STOPPED' || (!telemetry.is_running && telemetry.ipc_reachable === false)) {
+      return { state: 'stopped' as const, label: 'Arrêté' };
+    }
+    if (raw === 'UNKNOWN') {
+      return { state: 'unknown' as const, label: 'Inconnu' };
+    }
+    if (telemetry.is_running) {
+      return { state: 'operational' as const, label: 'Actif' };
+    }
+    if (raw === 'OPERATIONAL') {
+      return { state: 'stopped' as const, label: 'Arrêté (en veille)' };
+    }
+    return { state: 'stopped' as const, label: 'Arrêté (en veille)' };
+  })();
+
+  const engineUnavailableByIpc = telemetry !== null && telemetry.ipc_reachable === false;
 
   return (
     <PageContainer>
@@ -235,7 +267,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
               <span>Actualiser</span>
             </button>
 
-            {canManageCapture && telemetry !== null && (
+            {canManageCapture && telemetry !== null && !engineUnavailableByIpc && (
               isRunning ? (
                 <button
                   type="button"
@@ -262,9 +294,15 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
         }
       />
 
-      {(telemetryError || errorDetail || telemetry?.socket_error) && (
+      {(telemetryError || errorDetail || telemetry?.ipc_error || telemetry?.socket_error) && (
         <ErrorState
-          message={errorDetail || telemetry?.socket_error || telemetryError || 'Erreur télémétrie'}
+          message={
+            errorDetail ||
+            telemetry?.ipc_error ||
+            telemetry?.socket_error ||
+            telemetryError ||
+            'Erreur télémétrie'
+          }
           onRetry={onRefreshTelemetry}
         />
       )}
@@ -272,7 +310,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
       {/* 1. État du moteur & Contrôle de capture */}
       <SectionCard
         title="État du moteur et contrôle de capture"
-        actions={<StatusBadge state={engineState} label={telemetry ? (isRunning ? 'Actif' : 'Arrêté (en veille)') : 'Indisponible'} />}
+        actions={<StatusBadge state={engineBadge.state} label={engineBadge.label} />}
       >
         {telemetry === null ? (
           <EmptyState
@@ -429,53 +467,73 @@ export const CaptureView: React.FC<CaptureViewProps> = ({
                 <div className="p-2.5 rounded border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                   <div className="font-sans text-gray-500 dark:text-gray-400">Débit</div>
                   <div className="font-semibold text-gray-900 dark:text-gray-100 mt-0.5">
-                    {(telemetry?.current_mbps ?? 0).toFixed(3)} Mbps
+                    {telemetry?.current_mbps !== null && telemetry?.current_mbps !== undefined
+                      ? `${telemetry.current_mbps.toFixed(3)} Mbps`
+                      : 'Non disponible'}
                   </div>
                 </div>
                 <div className="p-2.5 rounded border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                   <div className="font-sans text-gray-500 dark:text-gray-400">Reçus</div>
                   <div className="font-semibold text-gray-900 dark:text-gray-100 mt-0.5">
-                    {(telemetry?.packets_received ?? lastIngestion?.packets_processed ?? 0).toLocaleString('fr-FR')}
+                    {lastIngestion
+                      ? lastIngestion.packets_processed.toLocaleString('fr-FR')
+                      : telemetry?.packets_received !== null && telemetry?.packets_received !== undefined
+                      ? telemetry.packets_received.toLocaleString('fr-FR')
+                      : 'Non disponible'}
                   </div>
                 </div>
                 <div className="p-2.5 rounded border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                   <div className="font-sans text-gray-500 dark:text-gray-400">Pertes</div>
                   <div className="font-semibold text-gray-900 dark:text-gray-100 mt-0.5">
-                    {(telemetry?.packets_dropped ?? 0).toLocaleString('fr-FR')}
+                    {telemetry?.packets_dropped !== null && telemetry?.packets_dropped !== undefined
+                      ? telemetry.packets_dropped.toLocaleString('fr-FR')
+                      : 'Non disponible'}
                   </div>
                 </div>
                 <div className="p-2.5 rounded border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                   <div className="font-sans text-gray-500 dark:text-gray-400">Volume</div>
                   <div className="font-semibold text-gray-900 dark:text-gray-100 mt-0.5">
-                    {formatBytes(telemetry?.bytes_processed ?? lastIngestion?.bytes_processed ?? 0)}
+                    {lastIngestion
+                      ? formatBytes(lastIngestion.bytes_processed)
+                      : telemetry?.bytes_processed !== null && telemetry?.bytes_processed !== undefined
+                      ? formatBytes(telemetry.bytes_processed)
+                      : 'Non disponible'}
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-2.5">
-                {protocolBreakdown.map((row) => {
-                  const pct = Math.round((row.count / totalTransportOrL2) * 100);
-                  return (
-                    <div key={row.label} className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-gray-700 dark:text-gray-300">{row.label}</span>
-                        <span className="font-mono tabular-nums text-gray-600 dark:text-gray-400">
-                          {row.count.toLocaleString('fr-FR')} ({pct}%)
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 bg-gray-200 dark:bg-[#2c313a] rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-600 dark:bg-blue-500" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              {stats ? (
+                <>
+                  <div className="space-y-2.5">
+                    {protocolBreakdown.map((row) => {
+                      const pct = Math.round((row.count / totalTransportOrL2) * 100);
+                      return (
+                        <div key={row.label} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-700 dark:text-gray-300">{row.label}</span>
+                            <span className="font-mono tabular-nums text-gray-600 dark:text-gray-400">
+                              {row.count.toLocaleString('fr-FR')} ({pct}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-200 dark:bg-[#2c313a] rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-600 dark:bg-blue-500" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-              <div className="pt-2 border-t border-gray-200 dark:border-[#2c313a] flex flex-wrap gap-3 font-mono tabular-nums text-gray-500 dark:text-gray-400">
-                <span>IPv4 : {stats.ipv4_packets.toLocaleString('fr-FR')}</span>
-                <span>IPv6 : {stats.ipv6_packets.toLocaleString('fr-FR')}</span>
-                <span>VLAN 802.1Q : {stats.vlan_packets.toLocaleString('fr-FR')}</span>
-              </div>
+                  <div className="pt-2 border-t border-gray-200 dark:border-[#2c313a] flex flex-wrap gap-3 font-mono tabular-nums text-gray-500 dark:text-gray-400">
+                    <span>IPv4 : {stats.ipv4_packets.toLocaleString('fr-FR')}</span>
+                    <span>IPv6 : {stats.ipv6_packets.toLocaleString('fr-FR')}</span>
+                    <span>VLAN 802.1Q : {stats.vlan_packets.toLocaleString('fr-FR')}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-gray-500 dark:text-gray-400">
+                  Répartition protocolaire non disponible pour cette session.
+                </div>
+              )}
             </div>
           )}
         </SectionCard>

@@ -1,17 +1,17 @@
-# Guide d'Installation sur Debian 13 (Trixie) — OpenNDR V0.1
+# Guide d'Installation sur Debian 13 (Trixie) — OpenNDR V0.2
 
-Ce guide détaille l'installation pas-à-pas d'OpenNDR V0.1 sur un système Debian 13 vierge.
+Ce guide détaille l'installation d'OpenNDR V0.2 sur un système Debian 13 vierge.
 
 ---
 
 ## 1. Prérequis Système
-- **Distribution** : Debian 13 (Trixie) 64 bits (x86_64).
+- **Distribution** : Debian 13 (Trixie) 64 bits (`x86_64`).
 - **Processeur** : 2 cœurs minimum (4 à 8 recommandés).
 - **Mémoire** : 4 Go minimum (8 Go recommandés).
-- **Disque** : 20 Go pour le système et les journaux (ext4 ou xfs).
+- **Disque** : 20 Go minimum pour le système et les journaux (`ext4` ou `xfs`).
 - **Interfaces réseau** : 2 interfaces réseau distinctes :
   - `eth0` : Interface d'administration (connectée au réseau de gestion, avec IP statique).
-  - `eth1` : Interface de capture passive (raccordée à un port miroir SPAN ou TAP réseau, sans IP).
+  - `eth1` : Interface de capture passive (raccordée à un port miroir SPAN ou TAP réseau, sans IP ni routes).
 
 ---
 
@@ -28,47 +28,41 @@ sudo bash deployment/debian/install.sh
 
 Le script effectue automatiquement :
 1. La vérification des prérequis CPU, RAM et interfaces.
-2. L'installation des paquets nécessaires (PostgreSQL, Python 3.11, Nginx, Rust/Cargo, outils de compilation).
+2. L'installation des paquets nécessaires (`postgresql`, `python3`, `nginx`, `nodejs`, `npm`, `cargo`/`rustc`, `libpcap-dev`, `libcap2-bin`).
 3. La création des utilisateurs système restreints `openndr` et `openndr-capture`.
-4. La création et la sécurisation des répertoires de travail (`/etc/openndr`, `/var/lib/openndr`, `/var/log/openndr`).
-5. La génération d'une clé secrète aléatoire de 64 caractères dans `/etc/openndr/backend.env`.
-6. La création de l'environnement virtuel Python (`.venv`) et l'installation des dépendances backend.
-7. L'application des migrations de base de données via Alembic (`alembic upgrade head`).
-8. La compilation de l'exécutable Rust `openndr-engine`.
-9. L'installation de la configuration Nginx et des unités systemd.
+4. La sécurisation des répertoires (`/etc/openndr` en `0750`, `/etc/openndr/backend.env` et `/etc/openndr/openndr.conf` en `0640`, `/var/lib/openndr/captures` en `0700`).
+5. La génération d'une clé secrète aléatoire et d'un mot de passe PostgreSQL aléatoire dans `/etc/openndr/backend.env`.
+6. L'installation du virtualenv Python backend et l'application obligatoire des migrations Alembic (`alembic upgrade head`).
+7. La compilation des assets statiques React/PWA via Vite dans `/opt/openndr/dist` (servis directement par Nginx).
+8. La compilation de `openndr-engine` en release et l'application des capabilities `cap_net_raw,cap_net_admin=eip` (échec bloquant si impossible).
+9. L'installation des unités systemd `openndr-backend.service` et `openndr-engine.service` ainsi que la configuration Nginx.
 
 ---
 
 ## 3. Initialisation du Premier Administrateur
 
-Par mesure de sécurité absolue, OpenNDR ne comporte **aucun compte ou mot de passe par défaut**.  
-Vous devez obligatoirement initialiser le premier administrateur avant le démarrage :
+OpenNDR ne comporte **aucun compte ou mot de passe par défaut**. Initialisez le premier administrateur avant le démarrage :
 
 ```bash
 openndr-admin create-first-admin \
   --email "admin@votre-domaine.local" \
   --full-name "Administrateur Principal SOC"
 ```
-Vous serez invité à saisir un mot de passe robuste conforme à la politique de sécurité (min. 12 caractères, majuscule, minuscule, chiffre, caractère spécial).
-
-*Remarque : Cette commande est à usage unique. Si un administrateur existe déjà dans PostgreSQL, la commande est immédiatement rejetée.*
 
 ---
 
 ## 4. Démarrage et Contrôle des Services
 
 ```bash
-# Démarrer les services
 sudo systemctl start openndr-backend
 sudo systemctl start openndr-engine
 
-# Vérifier les statuts systemd
 sudo systemctl status openndr-backend
 sudo systemctl status openndr-engine
+sudo systemctl status nginx
 
-# Vérifier la réponse de l'API
 curl http://127.0.0.1:8000/api/v1/health
 curl http://127.0.0.1:8000/api/v1/health/ready
 ```
 
-L'accès à l'interface Web s'effectue via navigateur sur `http://<IP_ADMIN>/`.
+L'accès à l'interface Web s'effectue via Nginx sur `http://<IP_ADMIN>/`.

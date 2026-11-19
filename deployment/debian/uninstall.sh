@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# OpenNDR V0.1 — Script de Désinstallation Contrôlée (Debian 13)
+# OpenNDR V0.2 — Script de Désinstallation Contrôlée (Debian 13)
 # ==============================================================================
 set -euo pipefail
 
@@ -15,7 +15,7 @@ echo "=========================================================="
 
 # 1. Arrêt des services systemd
 echo "[*] Arrêt et désactivation des services systemd..."
-for s in openndr-web openndr-backend openndr-engine; do
+for s in openndr-backend openndr-engine; do
     if systemctl is-active --quiet "$s" 2>/dev/null; then
         systemctl stop "$s" || true
     fi
@@ -25,6 +25,11 @@ for s in openndr-web openndr-backend openndr-engine; do
     rm -f "/etc/systemd/system/${s}.service"
 done
 systemctl daemon-reload 2>/dev/null || true
+
+if [ -L /etc/nginx/sites-enabled/openndr.conf ]; then
+    rm -f /etc/nginx/sites-enabled/openndr.conf
+    systemctl reload nginx 2>/dev/null || true
+fi
 
 # 2. Protection des données utilisateur et PCAP
 echo ""

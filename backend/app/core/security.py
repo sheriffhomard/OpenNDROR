@@ -1,27 +1,22 @@
 """
-Module de sécurité cryptographique pour OpenNDR V0.1
-Hachage Argon2id, vérification de politiques de mot de passe et gestion des jetons JWT.
+Cryptographic security module for OpenNDR V0.2.
+Mandatory Argon2id password hashing, strict JWT validation, and fail-closed DB revocation.
 """
 import base64
 import hashlib
 import hmac
 import json
-import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple, Dict, Any, Set
+from typing import Any, Dict, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 
-# Registre cache en mémoire des jetons révoqués (accélérateur de requêtes)
-REVOKED_TOKENS: Set[str] = set()
-
-# Tentative d'import d'Argon2id natif via argon2-cffi
 try:
     from argon2 import PasswordHasher
-    from argon2.exceptions import VerifyMismatchError, VerificationError
+    from argon2.exceptions import VerificationError, VerifyMismatchError
 
     _argon2_hasher = PasswordHasher(
         time_cost=settings.ARGON2_TIME_COST,
@@ -36,14 +31,33 @@ except ImportError:
     HAS_NATIVE_ARGON2 = False
 
 
+class DatabaseSecurityError(Exception):
+    """Raised when database verification fails during a security-critical check."""
+    pass
+
+
+def _require_argon2() -> PasswordHasher:
+    if not HAS_NATIVE_ARGON2 or _argon2_hasher is None:
+        raise RuntimeError(
+            "[FATAL SECURITY] Argon2id is mandatory, but argon2-cffi is not available."
+        )
+    return _argon2_hasher
+
+
+def _require_secret_key() -> str:
+    secret = settings.SECRET_KEY
+    if not secret or len(secret) < 32 or secret.strip() in settings.INSECURE_SECRET_VALUES:
+        raise RuntimeError(
+            "[FATAL SECURITY] SECRET_KEY is missing, weaker than 32 characters, or uses a forbidden placeholder."
+        )
+    return secret
+
+
 def validate_password_strength(password: str) -> Tuple[bool, Optional[str]]:
     """
-    Politique stricte de mot de passe OpenNDR V0.1 :
-    - Minimum 12 caractères
-    - Au moins une majuscule
-    - Au moins une minuscule
-    - Au moins un chiffre
-    - Au moins un caractère spécial
+    OpenNDR strict password policy:
+    - Minimum 12 characters
+    - At least one uppercase, one lowercase, one digit, and one special character
     """
     if len(password) < 12:
         return False, "Password must be at least 12 characters long."
@@ -59,70 +73,36 @@ def validate_password_strength(password: str) -> Tuple[bool, Optional[str]]:
 
 
 def hash_password(password: str) -> str:
-    """
-    Hashes passwords using mandatory Argon2id in production.
-    Fallback to PBKDF2 is strictly forbidden in production.
-    """
-    if HAS_NATIVE_ARGON2 and _argon2_hasher is not None:
-        return _argon2_hasher.hash(password)
-
-    if settings.OPENNDR_ENV.lower() == "production":
-        raise RuntimeError(
-            "[FATAL SECURITY] Argon2id is mandatory in production, but argon2-cffi is not available. "
-            "Startup aborted to prevent cryptographic weakness."
-        )
-
-    # Fallback sécurisé standard PBKDF2 pour tests/développement local
-    salt = secrets.token_bytes(16)
-    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000)
-    return f"pbkdf2:sha256:100000${salt.hex()}${key.hex()}"
+    """Hashes passwords exclusively using Argon2id. No fallback permitted."""
+    hasher = _require_argon2()
+    return hasher.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> Tuple[bool, bool]:
     """
-    Vérifie un mot de passe à temps constant.
-    Retourne (is_valid: bool, needs_rehash: bool).
-    Permet la migration transparente des anciens condensats PBKDF2 vers Argon2id lors de la connexion.
+    Verifies a password in constant time exclusively against Argon2id digests.
+    Returns (is_valid, needs_rehash). Non-Argon2id hashes are strictly rejected.
     """
     if not hashed_password or not plain_password:
         return False, False
 
-    # 1. Vérification Argon2id
-    if hashed_password.startswith("$argon2"):
-        if HAS_NATIVE_ARGON2 and _argon2_hasher is not None:
-            try:
-                is_valid = _argon2_hasher.verify(hashed_password, plain_password)
-                needs_rehash = _argon2_hasher.check_needs_rehash(hashed_password)
-                return bool(is_valid), bool(needs_rehash)
-            except (VerifyMismatchError, VerificationError):
-                return False, False
-            except Exception:
-                return False, False
-        else:
-            return False, False
+    if not hashed_password.startswith("$argon2id$"):
+        return False, False
 
-    # 2. Vérification Legacy PBKDF2 avec demande de re-hachage vers Argon2id
-    if hashed_password.startswith("pbkdf2:"):
-        try:
-            parts = hashed_password.split("$")
-            if len(parts) != 3:
-                return False, False
-            algo_iterations = parts[0]
-            salt = bytes.fromhex(parts[1])
-            expected_key = bytes.fromhex(parts[2])
-            iterations = int(algo_iterations.split(":")[2])
-            actual_key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, iterations)
-            is_valid = hmac.compare_digest(actual_key, expected_key)
-            # Dès que l'utilisateur s'authentifie, on signale qu'il faut migrer vers Argon2id
-            return is_valid, True
-        except Exception:
-            return False, False
-
-    return False, False
+    hasher = _require_argon2()
+    try:
+        is_valid = hasher.verify(hashed_password, plain_password)
+        needs_rehash = hasher.check_needs_rehash(hashed_password)
+        return bool(is_valid), bool(needs_rehash)
+    except (VerifyMismatchError, VerificationError):
+        return False, False
+    except Exception:
+        return False, False
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """Génération d'un jeton JWT signé par HMAC-SHA256 avec validation complète des claims."""
+    """Generates an HMAC-SHA256 JWT token with full claim set."""
+    secret = _require_secret_key()
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     if expires_delta:
@@ -144,36 +124,28 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
     payload_b64 = base64.urlsafe_b64encode(json.dumps(to_encode).encode()).decode().rstrip("=")
     signing_input = f"{header_b64}.{payload_b64}".encode()
-    signature = hmac.new(settings.SECRET_KEY.encode(), signing_input, hashlib.sha256).digest()
+    signature = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
     sig_b64 = base64.urlsafe_b64encode(signature).decode().rstrip("=")
 
     return f"{header_b64}.{payload_b64}.{sig_b64}"
 
 
-class DatabaseSecurityError(Exception):
-    """Exception levée en cas d'erreur de base de données durant un contrôle de sécurité critique."""
-    pass
-
-
 def is_token_revoked(jti: str, db: Optional[Session] = None) -> bool:
     """
-    Vérifie si un jeton a été révoqué dans la table PostgreSQL `revoked_tokens`.
-    Comportement FAIL-CLOSED impératif : en cas d'indisponibilité de la base,
-    l'accès n'est JAMAIS accordé et une exception critique est propagée.
+    Checks persistent token revocation in `revoked_tokens`.
+    Strict FAIL-CLOSED behavior across ALL environments: a missing or failing DB
+    session ALWAYS raises DatabaseSecurityError.
     """
     if db is None:
-        if settings.OPENNDR_ENV.lower() == "production":
-            raise DatabaseSecurityError(
-                "Security check failed: PostgreSQL session missing in production environment."
-            )
-        return False
+        raise DatabaseSecurityError(
+            "Security check failed: database session is mandatory to verify token revocation."
+        )
 
     try:
         from app.models.user import RevokedToken
         rev = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
         return rev is not None
     except Exception as e:
-        # FAIL-CLOSED: never turn a DB error into non-revocation
         raise DatabaseSecurityError(
             f"Critical failure during JWT revocation check in database: {e}"
         )
@@ -181,9 +153,15 @@ def is_token_revoked(jti: str, db: Optional[Session] = None) -> bool:
 
 def revoke_token(token: str, db: Optional[Session] = None) -> bool:
     """
-    Revokes an active token and persists invalidation in PostgreSQL.
-    FAIL-CLOSED behavior: raises DatabaseSecurityError if persistence cannot be guaranteed.
+    Revokes an active token and persists invalidation in the relational database.
+    Strict FAIL-CLOSED behavior across ALL environments: raises DatabaseSecurityError
+    whenever persistence cannot be guaranteed.
     """
+    if db is None:
+        raise DatabaseSecurityError(
+            "Unable to revoke token without an active database session."
+        )
+
     payload = decode_token(token, db=db, check_revocation=False)
     if not payload or "jti" not in payload:
         return False
@@ -196,13 +174,6 @@ def revoke_token(token: str, db: Optional[Session] = None) -> bool:
         if exp_ts
         else datetime.now(timezone.utc)
     )
-
-    if db is None:
-        if settings.OPENNDR_ENV.lower() == "production":
-            raise DatabaseSecurityError(
-                "Unable to revoke token without a persistent PostgreSQL session."
-            )
-        return True
 
     try:
         from app.models.user import RevokedToken
@@ -217,7 +188,6 @@ def revoke_token(token: str, db: Optional[Session] = None) -> bool:
             db.add(entry)
             db.commit()
 
-        # Opportunistic cleanup of expired revoked tokens
         now = datetime.now(timezone.utc)
         db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
         db.commit()
@@ -225,7 +195,7 @@ def revoke_token(token: str, db: Optional[Session] = None) -> bool:
     except Exception as e:
         db.rollback()
         raise DatabaseSecurityError(
-            f"Failed to persist token revocation in PostgreSQL: {e}"
+            f"Failed to persist token revocation in database: {e}"
         )
 
 
@@ -235,32 +205,23 @@ def decode_token(
     check_revocation: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
-    Décodage et vérification stricte d'un jeton JWT :
-    - Algorithme autorisé ('HS256')
-    - Signature HMAC-SHA256
-    - Expiration 'exp'
-    - Date d'émission 'iat'
-    - Identifiant unique 'jti'
-    - Émetteur 'iss' ('openndr')
-    - Audience 'aud' ('openndr-api')
-    - Sujet 'sub'
-    - Vérification de non-révocation persistante (FAIL-CLOSED)
+    Strict JWT decoding & validation (alg HS256, HMAC signature, exp, iat, sub, iss, aud, jti,
+    and persistent FAIL-CLOSED revocation check).
     """
+    secret = _require_secret_key()
     try:
         parts = token.split(".")
         if len(parts) != 3:
             return None
         header_b64, payload_b64, sig_b64 = parts
 
-        # Décodage et contrôle du Header
         header_padding = "=" * (-len(header_b64) % 4)
         header = json.loads(base64.urlsafe_b64decode(header_b64 + header_padding).decode())
         if header.get("alg") != "HS256" or header.get("typ") != "JWT":
             return None
 
-        # Vérification cryptographique à temps constant de la signature
         signing_input = f"{header_b64}.{payload_b64}".encode()
-        expected_sig = hmac.new(settings.SECRET_KEY.encode(), signing_input, hashlib.sha256).digest()
+        expected_sig = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
 
         sig_padding = "=" * (-len(sig_b64) % 4)
         actual_sig = base64.urlsafe_b64decode(sig_b64 + sig_padding)
@@ -271,14 +232,13 @@ def decode_token(
         payload_padding = "=" * (-len(payload_b64) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64 + payload_padding).decode())
 
-        # Contrôle des claims obligatoires
         now = datetime.now(timezone.utc).timestamp()
         exp = payload.get("exp")
         if exp is None or exp < now:
             return None
 
         iat = payload.get("iat")
-        if iat is None or iat > now + 60:  # Tolérance horloge max 60s
+        if iat is None or iat > now + 60:
             return None
 
         sub = payload.get("sub")
@@ -297,13 +257,11 @@ def decode_token(
         if not jti:
             return None
 
-        # Contrôle de révocation persistante PostgreSQL (FAIL-CLOSED)
         if check_revocation and is_token_revoked(jti, db):
             return None
 
         return payload
     except DatabaseSecurityError:
-        # Re-propagation impérative pour comportement fail-closed
         raise
     except Exception:
         return None

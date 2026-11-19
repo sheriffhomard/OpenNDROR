@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.security import revoke_token
+from app.core.security import DatabaseSecurityError, revoke_token
 from app.schemas.auth import LoginRequest, TokenResponse, PasswordChangeRequest
 from app.schemas.user import UserOut
 from app.services.auth_service import AuthService
@@ -62,15 +62,16 @@ def logout(
     token = authorization.split(" ")[1]
     try:
         success = revoke_token(token, db=db)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Token revocation failed (invalid token or unable to revoke).",
-            )
-    except Exception:
+    except DatabaseSecurityError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to persist token revocation in database. Sign-out not guaranteed.",
+        )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token revocation failed (invalid token or unable to revoke).",
         )
 
     ip_addr = get_client_ip(request)

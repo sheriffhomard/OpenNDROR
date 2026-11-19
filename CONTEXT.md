@@ -24,19 +24,18 @@
 [ Navigateur Desktop / Mobile / PWA Standalone ]
                      │ HTTPS (Rest API /api/v1/*)
                      ▼
-[ Serveur Web & Proxy Express / Vite (port 3000 dev | Nginx prod) ]
+[ Serveur Web Nginx (prod: /opt/openndr/dist) / Vite Dev (port 3000 + VITE_API_PROXY_TARGET) ]
   ├── Console React 19 + TypeScript + Tailwind CSS v4 (Clair & Sombre)
   ├── Navigation unifiée (Sidebar + TopBar) filtrée selon RBAC
   ├── Service Worker PWA (registerType: 'autoUpdate', offline shell)
-  ├── Planificateur de mises à jour automatiques en arrière-plan
-  └── Routes /api/v1/* (Auth, RBAC, Capture, Interfaces, Audit, Updates)
+  └── Proxy REST vers FastAPI /api/v1/* (Auth, RBAC, Capture, Interfaces, Audit, Updates)
                      │
        ┌─────────────┴──────────────┐
        │                            │
        ▼                            ▼
 [ Backend FastAPI + PostgreSQL ]  [ Moteur Rust `openndr-engine` V0.2 ]
   - SQLAlchemy 2.0 + Alembic        - AF_PACKET / PACKET_MMAP (TPACKET_V2)
-  - Argon2id & JWT                  - Décodeur L2–L4 (Eth/VLAN/ARP/IP/ICMP/TCP/UDP)
+  - Argon2id exclusif & JWT         - Décodeur L2–L4 (Eth/VLAN/ARP/IP/ICMP/TCP/UDP)
   - CLI `openndr-admin`             - Lecteur/Écrivain PCAP rotatif + IPC UNIX
 ```
 
@@ -60,13 +59,13 @@
 
 ---
 
-## 4. Cycle de Mise à Jour Automatique & PWA
+## 4. Cycle de Mise à Jour & PWA
 
-- **Côté serveur (`server.ts`)** :
-  - `GET /api/v1/system/updates` : expose `current_version`, `release_date`, `last_checked_at`, `last_updated_at`, `next_scheduled_check_at`, `auto_update_enabled`, `check_interval_minutes`, `engine_integrity_ok` et l'historique d'exécution.
-  - `POST /api/v1/system/updates/check` : vérifie la disponibilité de versions et l'intégrité du moteur.
-  - `POST /api/v1/system/updates/force` : force la resynchronisation immédiate et la vérification du binaire Rust avec journalisation dans `audit_logs`.
-  - `PUT /api/v1/system/updates/config` : active/désactive et configure la périodicité du scheduler `setInterval` côté serveur.
+- **Côté backend FastAPI (`backend/app/api/v1/system.py` + `system_settings`)** :
+  - `GET /api/v1/system/updates` : expose l'état persisté dans PostgreSQL (`current_version`, `release_date` issue de `OPENNDR_RELEASE_DATE` ou `null`, `last_checked_at`, `last_updated_at`, `next_scheduled_check_at`, `auto_update_enabled`, `check_interval_minutes`, `engine_integrity_ok` réel et l'historique d'exécution).
+  - `POST /api/v1/system/updates/check` *(permission `system:manage`)* : vérifie l'intégrité du moteur et journalise dans PostgreSQL.
+  - `POST /api/v1/system/updates/force` *(permission `system:manage`)* : force la vérification et synchronise l'état dans PostgreSQL + `audit_logs`.
+  - `PUT /api/v1/system/updates/config` *(permission `system:manage`)* : persiste la périodicité dans PostgreSQL (`system_settings`).
 - **Côté client (`vite.config.ts`)** :
   - `vite-plugin-pwa` configuré en `registerType: 'autoUpdate'` avec exclusion explicite `/^\/api\//` du fallback hors-ligne afin de ne jamais masquer les appels REST d'authentification ou de santé.
 
@@ -74,6 +73,6 @@
 
 ## 5. Vérifications & Garde-fous Qualité
 
-- `npm test` exécute `scripts/verify-frontend.mjs` (interdisant toute constante simulée ou mock dans `src/`), `scripts/verify-ui.mts` (vérification de rendu SSR pour les états RBAC, serveur indisponible et données vides) suivi de `tsc --noEmit`.
+- `npm test` exécute `scripts/verify-frontend.mjs` (scanner anti-prototypage sur `src/`, `backend/`, `deployment/`, `package.json` et `vite.config.ts`), `scripts/test-anti-mock.mjs` (test négatif de régression du scanner), `scripts/verify-ui.mts` (vérification de rendu SSR pour les états RBAC, les 5 états du moteur Rust, valeurs `null` et serveur indisponible) suivi de `tsc --noEmit`.
 - `npm run build` compile le bundle production et génère le manifeste PWA + Service Worker Workbox dans `dist/`.
-- `cargo test --manifest-path engine/Cargo.toml` et `pytest backend/tests -v` valident les couches natives Rust et FastAPI/PostgreSQL sur environnement disposant des runtimes Rust et Python.
+- `alembic upgrade head`, `cargo test --manifest-path engine/Cargo.toml` et `pytest backend/tests -v` valident les migrations de schéma, les couches natives Rust et FastAPI/PostgreSQL.

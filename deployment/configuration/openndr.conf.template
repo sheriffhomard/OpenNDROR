@@ -1,5 +1,5 @@
 # ==============================================================================
-# OpenNDR V0.1 — Configuration Globale de la Sonde
+# OpenNDR V0.2 — Configuration Globale de la Sonde
 # ==============================================================================
 
 [network]
@@ -30,7 +30,7 @@ retention_days = 30
 max_file_size_mb = 1000
 
 [database]
-# Connexion PostgreSQL (stockage structuré: utilisateurs, rôles, interfaces, logs)
-url = "postgresql+psycopg2://openndr:openndr_secure_password@127.0.0.1:5432/openndr_db"
+# Les identifiants PostgreSQL (DATABASE_URL) sont définis exclusivement dans /etc/openndr/backend.env (chmod 640)
 pool_size = 10
 max_overflow = 20
+

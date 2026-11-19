@@ -9,7 +9,9 @@ import { User, AuthSession, PermissionCode } from '../types/auth';
 import {
   SystemService,
   NetworkInterfaceConfig,
+  IsolationCheckResult,
   StorageMetrics,
+  PlatformHealth,
   AuditLogItem,
   EngineTelemetry,
   PcapIngestionResult,
@@ -438,15 +440,23 @@ class ApiService {
       Array<{
         id: number;
         name: string;
-        role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE' | 'LOOPBACK';
+        role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE' | 'LOOPBACK' | 'MONITOR';
         ip_address: string | null;
-        mac_address: string;
+        mac_address: string | null;
         is_promiscuous: boolean;
         is_up: boolean;
-        mtu: number;
-        speed_mbps: number;
-        rx_dropped: number;
+        mtu: number | null;
+        speed_mbps: number | null;
+        rx_packets?: number | null;
+        tx_packets?: number | null;
+        rx_bytes?: number | null;
+        tx_bytes?: number | null;
+        rx_dropped: number | null;
         is_stealth_compliant: boolean;
+        operstate?: string;
+        is_physical?: boolean;
+        ipv4_addresses?: string[];
+        ipv6_addresses?: string[];
       }>
     >('/system/interfaces');
 
@@ -454,18 +464,26 @@ class ApiService {
       name: item.name,
       role: item.role,
       ipAddress: item.ip_address,
-      macAddress: item.mac_address,
+      macAddress: item.mac_address ?? null,
       isPromiscuous: item.is_promiscuous,
       isUp: item.is_up,
-      mtu: item.mtu,
-      speedMbps: item.speed_mbps,
-      rxDropped: item.rx_dropped,
+      mtu: item.mtu ?? null,
+      speedMbps: item.speed_mbps ?? null,
+      rxPackets: item.rx_packets ?? null,
+      txPackets: item.tx_packets ?? null,
+      rxBytes: item.rx_bytes ?? null,
+      txBytes: item.tx_bytes ?? null,
+      rxDropped: item.rx_dropped ?? null,
       isStealthCompliant: item.is_stealth_compliant,
+      operstate: item.operstate,
+      isPhysical: item.is_physical,
+      ipv4Addresses: item.ipv4_addresses,
+      ipv6Addresses: item.ipv6_addresses,
       complianceReason:
         item.role !== 'CAPTURE_PASSIVE'
           ? 'Interface non dédiée à la capture passive'
           : item.is_stealth_compliant
-          ? 'Conforme : aucune adresse IP assignée et mode promiscuous actif'
+          ? 'Conforme : aucune adresse IP assignée'
           : 'Non conforme : une adresse IP est assignée sur l\'interface de capture passive',
     }));
   }
@@ -527,36 +545,12 @@ class ApiService {
     });
   }
 
-  public async getIsolationCheck(): Promise<{
-    interface: string;
-    status: string;
-    is_isolated: boolean;
-    has_ip: boolean;
-    has_routes: boolean;
-    is_promiscuous: boolean;
-    details: string;
-  }> {
-    return await this.request('/system/interfaces/isolation-check');
+  public async getIsolationCheck(): Promise<IsolationCheckResult> {
+    return await this.request<IsolationCheckResult>('/system/interfaces/isolation-check');
   }
 
-  public async getHealth(): Promise<{
-    status: string;
-    version: string;
-    target_platform: string;
-    database: { connected?: boolean; status: string };
-    capture_engine: {
-      version?: string;
-      mode?: string;
-      socket_ready?: boolean;
-      socket_present?: boolean;
-      capture_active?: boolean;
-      packets_received?: number;
-      status?: string;
-      notice?: string;
-    };
-    timestamp: string;
-  }> {
-    return await this.request('/health');
+  public async getHealth(): Promise<PlatformHealth> {
+    return await this.request<PlatformHealth>('/health');
   }
 
   public async getReadiness(): Promise<{

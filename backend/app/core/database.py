@@ -1,6 +1,6 @@
 """
-Gestion de la persistance relationnelle SQLAlchemy pour OpenNDR V0.1
-Supporte PostgreSQL (production) et SQLite (tests isolés).
+SQLAlchemy persistence layer for OpenNDR V0.2.
+PostgreSQL in production; explicit DATABASE_URL required for runtime and migrations.
 """
 import logging
 from typing import Generator, Tuple
@@ -12,28 +12,44 @@ logger = logging.getLogger("openndr.database")
 
 Base = declarative_base()
 
-# Configuration du moteur SQLAlchemy selon la cible
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
+def _resolve_database_url() -> str:
+    if settings.DATABASE_URL:
+        return settings.DATABASE_URL
+    if settings.OPENNDR_ENV.lower() == "production":
+        raise RuntimeError(
+            "[FATAL SECURITY] DATABASE_URL must be configured in production mode."
+        )
+    # Isolated in-memory engine only when imported outside runtime DB context (e.g. pure unit tests)
+    return "sqlite:///:memory:"
+
+
+_db_url = _resolve_database_url()
+is_sqlite = _db_url.startswith("sqlite")
 
 connect_args = {"check_same_thread": False} if is_sqlite else {}
-pool_kwargs = {} if is_sqlite else {
-    "pool_size": settings.DB_POOL_SIZE,
-    "max_overflow": settings.DB_MAX_OVERFLOW,
-    "pool_timeout": settings.DB_POOL_TIMEOUT,
-    "pool_pre_ping": True,
-}
+pool_kwargs = (
+    {}
+    if is_sqlite
+    else {
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_POOL_TIMEOUT,
+        "pool_pre_ping": True,
+    }
+)
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    _db_url,
     connect_args=connect_args,
-    **pool_kwargs
+    **pool_kwargs,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db() -> Generator[Session, None, None]:
-    """Dépendance FastAPI fournissant une session de base de données transactionnelle."""
+    """FastAPI dependency providing a transactional database session."""
     db = SessionLocal()
     try:
         yield db
@@ -42,10 +58,9 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def check_database_connection() -> Tuple[bool, str]:
-    """
-    Vérification réelle de la connectivité à la base de données via une requête SQL 'SELECT 1'.
-    Ne jamais déclarer la base connectée sans exécution réelle.
-    """
+    """Real connectivity probe executing 'SELECT 1' against configured DB."""
+    if not settings.DATABASE_URL:
+        return False, "DATABASE_URL is not configured"
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))

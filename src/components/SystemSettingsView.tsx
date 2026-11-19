@@ -26,6 +26,8 @@ import {
 interface SystemSettingsViewProps {
   health: PlatformHealth | null;
   updateState: SystemUpdateState | null;
+  isAuthenticated?: boolean;
+  canManageUpdates?: boolean;
   isLoadingUpdates?: boolean;
   updatesError?: string | null;
   onRetryUpdates?: () => void;
@@ -61,6 +63,8 @@ function formatDateTime(iso: string | null | undefined): string {
 export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   health,
   updateState,
+  isAuthenticated = true,
+  canManageUpdates = true,
   isLoadingUpdates = false,
   updatesError = null,
   onRetryUpdates,
@@ -81,16 +85,17 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const currentInterval = updateState?.check_interval_minutes;
 
   const handleToggleAutoUpdate = async () => {
-    if (!updateState) return;
+    if (!updateState || !canManageUpdates) return;
     await onUpdateAutoConfig(!updateState.auto_update_enabled, updateState.check_interval_minutes);
   };
 
   const handleIntervalChange = async (minutes: number) => {
-    if (!updateState) return;
+    if (!updateState || !canManageUpdates) return;
     await onUpdateAutoConfig(updateState.auto_update_enabled, minutes);
   };
 
   const handleConfirmForceUpdate = async () => {
+    if (!canManageUpdates) return;
     await onForceUpdate();
     setConfirmForceOpen(false);
   };
@@ -185,8 +190,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             <button
               type="button"
               onClick={onCheckForUpdates}
-              disabled={!updateState || isCheckingUpdate || isForcingUpdate}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-300 dark:border-[#2c313a] bg-white dark:bg-[#1f2329] hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors disabled:opacity-50"
+              disabled={!canManageUpdates || !updateState || isCheckingUpdate || isForcingUpdate}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-300 dark:border-[#2c313a] bg-white dark:bg-[#1f2329] hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
               <span>{isCheckingUpdate ? 'Vérification...' : 'Vérifier les mises à jour'}</span>
@@ -195,8 +200,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             <button
               type="button"
               onClick={() => setConfirmForceOpen(true)}
-              disabled={!updateState || isForcingUpdate || isCheckingUpdate}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors disabled:opacity-50"
+              disabled={!canManageUpdates || !updateState || isForcingUpdate || isCheckingUpdate}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <DownloadCloud className="w-3.5 h-3.5" />
               <span>{isForcingUpdate ? 'Mise à jour...' : 'Forcer la mise à jour'}</span>
@@ -222,6 +227,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           />
         ) : (
           <div className="space-y-5 text-xs">
+            {!canManageUpdates && (
+              <div className="p-3 rounded-md border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300">
+                {!isAuthenticated
+                  ? 'Authentification administrateur requise pour déclencher une vérification, forcer une mise à jour ou modifier la planification.'
+                  : 'Mode lecture seule : le privilège system:manage est requis pour modifier la configuration ou lancer une mise à jour.'}
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
                 <div className="text-gray-500 dark:text-gray-400">Dernière vérification</div>
@@ -262,9 +274,11 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   type="button"
                   role="switch"
                   aria-checked={Boolean(autoEnabled)}
-                  disabled={isSavingConfig}
+                  disabled={!canManageUpdates || isSavingConfig}
                   onClick={handleToggleAutoUpdate}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    canManageUpdates ? 'cursor-pointer' : 'cursor-not-allowed'
+                  } ${
                     autoEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'
                   }`}
                 >
@@ -291,7 +305,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 <select
                   id="update-interval-select"
                   value={currentInterval ?? 15}
-                  disabled={isSavingConfig || !autoEnabled}
+                  disabled={!canManageUpdates || isSavingConfig || !autoEnabled}
                   onChange={(e) => handleIntervalChange(Number(e.target.value))}
                   className="px-3 py-1.5 rounded-md border border-gray-300 dark:border-[#2c313a] bg-white dark:bg-[#181b20] text-gray-900 dark:text-gray-100 font-mono text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50"
                 >

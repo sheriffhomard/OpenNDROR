@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Terminal } from 'lucide-react';
-import { NetworkInterfaceConfig } from '../types/system';
+import { NetworkInterfaceConfig, IsolationCheckResult } from '../types/system';
 import {
   PageContainer,
   PageHeader,
@@ -13,12 +13,19 @@ import {
 
 interface InterfacesViewProps {
   interfaces: NetworkInterfaceConfig[];
+  isolationCheck?: IsolationCheckResult | null;
   interfacesError: string | null;
   onRefresh: () => Promise<void>;
 }
 
+function formatSpeed(speedMbps: number | null | undefined): string {
+  if (speedMbps === null || speedMbps === undefined) return 'Non disponible';
+  return speedMbps >= 1000 ? `${speedMbps / 1000} Gbps` : `${speedMbps} Mbps`;
+}
+
 export const InterfacesView: React.FC<InterfacesViewProps> = ({
   interfaces,
+  isolationCheck = null,
   interfacesError,
   onRefresh,
 }) => {
@@ -101,12 +108,17 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
                   </div>
                   <div className="py-2 flex justify-between gap-4">
                     <dt className="text-gray-500 dark:text-gray-400">Adresse MAC</dt>
-                    <dd className="font-mono text-gray-900 dark:text-gray-100">{adminIface.macAddress}</dd>
+                    <dd className="font-mono text-gray-900 dark:text-gray-100">
+                      {adminIface.macAddress ?? 'Non disponible'}
+                    </dd>
                   </div>
                   <div className="py-2 flex justify-between gap-4">
                     <dt className="text-gray-500 dark:text-gray-400">État du lien / MTU</dt>
                     <dd className="font-mono text-gray-900 dark:text-gray-100">
-                      {adminIface.isUp ? 'UP' : 'DOWN'} · {adminIface.mtu} octets
+                      {adminIface.isUp ? 'UP' : 'DOWN'} ·{' '}
+                      {adminIface.mtu !== null && adminIface.mtu !== undefined
+                        ? `${adminIface.mtu} octets`
+                        : 'MTU non disponible'}
                     </dd>
                   </div>
                 </dl>
@@ -172,6 +184,25 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
                       {passiveIface.complianceReason}
                     </dd>
                   </div>
+                  {isolationCheck && (
+                    <div className="py-2 flex flex-col gap-1">
+                      <dt className="text-gray-500 dark:text-gray-400">
+                        Vérification d&apos;isolation ({isolationCheck.validation_result || isolationCheck.status})
+                      </dt>
+                      <dd className="text-gray-700 dark:text-gray-300">
+                        <div>{isolationCheck.details}</div>
+                        {isolationCheck.observed_state && (
+                          <div className="mt-1 font-mono text-[11px] text-gray-500 dark:text-gray-400 flex flex-wrap gap-3">
+                            <span>Routes : {isolationCheck.has_routes ? 'Détectées' : 'Aucune'}</span>
+                            <span>Lien : {isolationCheck.observed_state.is_up ? 'UP' : 'DOWN'}</span>
+                            <span>
+                              Capture prête : {isolationCheck.observed_state.capture_ready ? 'Oui' : 'Non'}
+                            </span>
+                          </div>
+                        )}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               )}
             </SectionCard>
@@ -219,16 +250,18 @@ export const InterfacesView: React.FC<InterfacesViewProps> = ({
                         {iface.ipAddress || 'Aucune'}
                       </td>
                       <td className="py-2.5 px-4 font-mono text-gray-600 dark:text-gray-400">
-                        {iface.macAddress}
+                        {iface.macAddress ?? 'Non disponible'}
                       </td>
                       <td className="py-2.5 px-4 font-mono text-gray-700 dark:text-gray-300">
-                        {iface.mtu}
+                        {iface.mtu !== null && iface.mtu !== undefined ? iface.mtu : 'Non disponible'}
                       </td>
                       <td className="py-2.5 px-4 font-mono text-gray-700 dark:text-gray-300">
-                        {iface.speedMbps >= 1000 ? `${iface.speedMbps / 1000} Gbps` : `${iface.speedMbps} Mbps`}
+                        {formatSpeed(iface.speedMbps)}
                       </td>
                       <td className="py-2.5 px-4 font-mono text-gray-700 dark:text-gray-300">
-                        {iface.rxDropped}
+                        {iface.rxDropped !== null && iface.rxDropped !== undefined
+                          ? iface.rxDropped.toLocaleString('fr-FR')
+                          : 'Inconnu'}
                       </td>
                       <td className="py-2.5 px-4">
                         <StatusBadge

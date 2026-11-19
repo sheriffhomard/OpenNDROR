@@ -112,7 +112,7 @@ Toutes les captures ci-dessous ont été réalisées en conditions réelles (`14
                                     │ HTTPS (Port 443 / Reverse Proxy)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  Serveur Web Nginx / Express & Frontend SPA React + PWA Workbox        │
+│  Serveur Web Nginx (prod: /opt/openndr/dist) / Vite (dev) + PWA        │
 │  - Navigation unifiée par Sidebar persistante + tiroir mobile          │
 │  - TopBar épurée (fil d'Ariane, connexion API, thème, session)         │
 │  - Thèmes Clair / Sombre sobres, composants UI uniformisés             │
@@ -124,7 +124,7 @@ Toutes les captures ci-dessous ont été réalisées en conditions réelles (`14
 │  Backend d'Orchestration FastAPI (/opt/openndr/backend)                │
 │  - Authentification Argon2id & JWT avec révocation persistante         │
 │  - Middleware RBAC strict (8 permissions / 3 rôles)                    │
-│  - Orchestration capture & ingestion PCAP (/api/v1/system/capture/*)   │
+│  - Orchestration capture, PCAP & mises à jour (/api/v1/system/*)       │
 │  - CLI d'administration : openndr-admin create-first-admin             │
 └───────────────┬────────────────────────────────────────┬───────────────┘
                 │ SQLAlchemy / Alembic                   │ UNIX Socket IPC + CLI
@@ -134,7 +134,7 @@ Toutes les captures ci-dessous ont été réalisées en conditions réelles (`14
 │ - Users, Roles, Permissions    │      │ - AF_PACKET / PACKET_MMAP      │
 │ - Revoked Tokens (persistant)  │      │   (Anneau zero-copy TPACKET_V2)│
 │ - Audit Logs (append-only)     │      │ - Décodeur L2–L4 (Eth/VLAN/    │
-│ - Network Interfaces state     │      │   ARP/IPv4/IPv6/ICMP/TCP/UDP)  │
+│ - System Settings & Interfaces │      │   ARP/IPv4/IPv6/ICMP/TCP/UDP)  │
 └────────────────────────────────┘      │ - Lecteur PCAP/PCAPNG &        │
                                         │   écriture rotative locale     │
                                         └────────────────────────────────┘
@@ -164,14 +164,14 @@ OpenNDROR/
 │   │   └── engine/                 # Binaire openndr-engine (IPC UNIX + --check-config / --ingest)
 │   └── Cargo.toml                  # Configuration du workspace Rust
 ├── deployment/                     # Déploiement natif Debian 13
-│   ├── debian/                     # install.sh, uninstall.sh, check-prerequisites.sh, nginx
-│   ├── systemd/                    # openndr-backend.service, openndr-engine.service, openndr-web.service
-│   └── configuration/              # backend.env.example, openndr.conf.example
+│   ├── debian/                     # install.sh, uninstall.sh, check-prerequisites.sh, nginx-openndr.conf
+│   ├── systemd/                    # openndr-backend.service, openndr-engine.service
+│   └── configuration/              # backend.env.template, openndr.conf.template
 ├── docs/                           # Documentation d'ingénierie et 11 captures réelles
 │   ├── screenshots/                # Captures 01 à 11 actualisées (Clair/Sombre/Mobile/Diagnostics)
 │   └── *.md                        # ARCHITECTURE, INSTALLATION_DEBIAN_13, SECURITY, API, ROADMAP...
-├── public/                         # Logo officiel & icônes PWA (icon.svg, pwa-*.png, apple-touch-icon.png)
-├── scripts/                        # verify-frontend.mjs (anti-mock) & verify-ui.mts (rendu & RBAC)
+├── public/                         # Logo officiel, theme-init.js & icônes PWA
+├── scripts/                        # verify-frontend.mjs, test-anti-mock.mjs & verify-ui.mts
 ├── src/                            # Interface Web React 19 / TypeScript / Tailwind CSS v4
 │   ├── config/navigation.ts        # Définition centralisée des sections et permissions RBAC
 │   ├── components/
@@ -191,8 +191,7 @@ OpenNDROR/
 │   └── App.tsx                     # Contrôleur principal, gestion connexion backend & RBAC
 ├── CONTEXT.md                      # Document de contexte produit & architecture
 ├── CHANGELOG.md                    # Historique des versions (V0.1.0 & V0.2.0)
-├── server.ts                       # Serveur Express / Vite (port 3000), auto-updater & pont Rust
-├── vite.config.ts                  # Configuration Vite + VitePWA (autoUpdate)
+├── vite.config.ts                  # Configuration Vite + proxy VITE_API_PROXY_TARGET + VitePWA
 └── .github/workflows/ci.yml        # Pipeline CI GitHub Actions (Rust, Python, Frontend)
 ```
 
@@ -226,8 +225,8 @@ cargo build --release --manifest-path engine/Cargo.toml
 # Tests backend FastAPI
 PYTHONPATH=backend pytest backend/tests -v
 
-# Console Web & serveur de développement (port 3000) + vérification statique
-npm install && npm test && npm run dev
+# Console Web & serveur de développement Vite (port 3000) avec proxy vers FastAPI
+VITE_API_PROXY_TARGET="http://127.0.0.1:8001" npm install && npm test && VITE_API_PROXY_TARGET="http://127.0.0.1:8001" npm run dev
 ```
 
 ---

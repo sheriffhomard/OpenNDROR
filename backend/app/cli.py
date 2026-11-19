@@ -14,7 +14,7 @@ from app.services.audit_service import AuditService
 def check_database_migrated():
     """
     Vérifie impérativement que les migrations de schéma Alembic ont été appliquées.
-    L'appel direct à Base.metadata.create_all est strictement banni : Alembic est
+    La création directe de tables hors migration est strictement bannie : Alembic est
     l'unique mécanisme autorisé pour gouverner le schéma de production.
     """
     try:

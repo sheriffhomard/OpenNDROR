@@ -217,8 +217,8 @@ export const DocsView: React.FC = () => {
                   <div>sudo bash deployment/debian/check-prerequisites.sh</div>
                   <div className="text-gray-500 pt-2"># 2. Exécuter l&apos;installation native</div>
                   <div>sudo bash deployment/debian/install.sh</div>
-                  <div className="text-gray-500 pt-2"># 3. Activer et démarrer les services systemd</div>
-                  <div>sudo systemctl enable --now openndr-backend openndr-engine openndr-web</div>
+                  <div className="text-gray-500 pt-2"># 3. Activer et démarrer les services systemd et Nginx</div>
+                  <div>sudo systemctl enable --now openndr-backend openndr-engine nginx</div>
                   <div className="text-gray-500 pt-2"># 4. Contrôler l&apos;état de santé de l&apos;API</div>
                   <div>curl -s http://127.0.0.1:8000/api/v1/health</div>
                 </div>

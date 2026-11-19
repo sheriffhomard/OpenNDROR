@@ -1,8 +1,7 @@
 """
-Sondes de Santé et Disponibilité OpenNDR V0.2
-Distinction stricte entre Liveness (vie du processus) et Readiness (disponibilité dépendances).
+Health and readiness probes for OpenNDR V0.2.
+Strictly distinguishes HTTP process liveness, PostgreSQL readiness, and Rust engine IPC health.
 """
-import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Response, status
 
@@ -16,7 +15,7 @@ router = APIRouter()
 
 @router.get("/live", response_model=LivenessOut)
 def liveness():
-    """Vérifie que le processus HTTP backend est vivant."""
+    """Verifies that the HTTP API worker process is alive."""
     return {
         "status": "UP",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -26,8 +25,8 @@ def liveness():
 @router.get("/ready", response_model=ReadinessOut)
 def readiness(response: Response):
     """
-    Vérifie la disponibilité réelle des dépendances critiques (PostgreSQL).
-    Retourne HTTP 503 si la base de données ne répond pas.
+    Verifies real relational database connectivity.
+    Returns HTTP 503 if PostgreSQL is unreachable.
     """
     db_connected, db_msg = check_database_connection()
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -52,40 +51,57 @@ def readiness(response: Response):
 @router.get("", response_model=HealthCheckOut)
 def health_detailed(response: Response):
     """
-    Rapport d'état détaillé des composants.
-    Vérification réelle de PostgreSQL et du socket IPC du moteur Rust V0.2.
+    Detailed platform health report combining verified PostgreSQL status
+    and real Rust engine verification (binary, systemd unit, socket, IPC).
     """
     db_connected, db_msg = check_database_connection()
-    engine_socket_exists = os.path.exists(settings.ENGINE_SOCKET_PATH)
-    engine_info = SystemService.send_engine_ipc_command("GET_STATUS")
+    engine_info = SystemService.get_engine_status()
+
+    engine_status = engine_info.get("engine_status", "UNKNOWN")
     is_running = bool(engine_info.get("is_running", False))
+    ipc_reachable = bool(engine_info.get("ipc_reachable", False))
+    binary_present = bool(engine_info.get("binary_present", False))
+    socket_present = bool(engine_info.get("socket_present", False))
 
     overall_status = "HEALTHY" if db_connected else "DEGRADED"
     if not db_connected:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    if engine_status == "OPERATIONAL":
+        notice = "Rust engine IPC verified and operational."
+    elif engine_status == "STOPPED":
+        notice = "Rust engine binary present; service is currently stopped."
+    elif engine_status == "UNAVAILABLE":
+        notice = "Rust engine binary not found on host."
+    elif engine_status == "DEGRADED":
+        notice = f"Rust engine degraded: {engine_info.get('ipc_error') or 'IPC unreachable'}"
+    else:
+        notice = "Rust engine state unknown (IPC socket absent and systemd unavailable)."
 
     return {
         "status": overall_status,
         "version": settings.VERSION,
         "target_platform": "Debian 13 (Trixie)",
         "database": {
+            "connected": db_connected,
             "status": "CONNECTED" if db_connected else "DISCONNECTED",
             "details": db_msg,
             "target": settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "local_sqlite",
         },
         "capture_engine": {
-            "version": engine_info.get("engine_version", settings.VERSION),
-            "mode": engine_info.get("capture_mode", "STANDBY"),
+            "engine_status": engine_status,
+            "service_status": engine_info.get("service_status"),
+            "version": engine_info.get("engine_version"),
+            "mode": engine_info.get("capture_mode"),
             "ipc_socket": settings.ENGINE_SOCKET_PATH,
-            "socket_present": engine_socket_exists,
+            "binary_present": binary_present,
+            "socket_present": socket_present,
+            "ipc_reachable": ipc_reachable,
+            "ipc_error": engine_info.get("ipc_error"),
             "capture_active": is_running,
             "active_interface": engine_info.get("active_interface"),
-            "packets_received": engine_info.get("packets_received", 0),
-            "notice": (
-                "V0.2 engine active (AF_PACKET / PACKET_MMAP & L2-L4 decoding)."
-                if is_running
-                else "V0.2 engine on standby (ready for AF_PACKET capture and PCAP/PCAPNG ingestion)."
-            ),
+            "packets_received": engine_info.get("packets_received"),
+            "notice": notice,
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

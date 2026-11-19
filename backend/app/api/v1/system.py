@@ -1,19 +1,19 @@
 """
-Routes de supervision système, contrôle moteur V0.2, gestion des interfaces réelles et audit.
-Élimination intégrale de toute fausse donnée réseau, de tout PID simulé et de toute confusion de stockage.
+System supervision, V0.2 engine control, real network interfaces, storage, updates, and audit routes.
+No fake MAC addresses, no artificial MTU/drop defaults, and no synthetic standby states.
 """
 import base64
 import binascii
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import get_db, check_database_connection
-from app.models.user import User
+from app.core.database import check_database_connection, get_db
 from app.models.audit import AuditLog
-from app.schemas.system import AuditLogOut, NetworkInterfaceOut
-from app.api.deps import require_permission, get_client_ip
+from app.models.user import User
+from app.schemas.system import AuditLogOut, NetworkInterfaceOut, UpdateConfigIn
+from app.api.deps import get_client_ip, require_permission
 from app.services.audit_service import AuditService
 from app.services.system_service import SystemService
 
@@ -24,25 +24,30 @@ router = APIRouter()
 def get_system_status(
     current_user: User = Depends(require_permission("system:view")),
 ):
-    """
-    Retourne l'état réel des composants de la plateforme OpenNDR V0.2.
-    Supervision effective des unités systemd, de l'isolation passive, du moteur Rust et du stockage.
-    """
+    """Returns verified OS, systemd, passive isolation, storage, and Rust engine status."""
     db_ok, db_msg = check_database_connection()
     services_status = SystemService.get_systemd_services_status()
     isolation_check = SystemService.check_interface_isolation(settings.CAPTURE_INTERFACE)
     storage_metrics = SystemService.get_real_storage_metrics()
-    engine_telemetry = SystemService.send_engine_ipc_command("GET_STATUS")
+    engine_telemetry = SystemService.get_engine_status()
 
-    is_engine_running = engine_telemetry.get("is_running", False)
-    capture_mode = engine_telemetry.get("capture_mode", "STANDBY")
+    is_engine_running = bool(engine_telemetry.get("is_running", False))
+    engine_status = engine_telemetry.get("engine_status", "UNKNOWN")
+    capture_mode = engine_telemetry.get("capture_mode")
+
+    if is_engine_running and capture_mode:
+        engine_state_label = f"ACTIVE ({capture_mode})"
+    else:
+        engine_state_label = engine_status
 
     return {
         "platform": {
             "version": settings.VERSION,
             "target_os": "Debian 13 (Trixie)",
             "environment": settings.OPENNDR_ENV,
-            "engine_state": f"ACTIVE ({capture_mode})" if is_engine_running else "STANDBY (V0.2 Engine Ready)",
+            "engine_state": engine_state_label,
+            "database_connected": db_ok,
+            "database_details": db_msg,
         },
         "engine": engine_telemetry,
         "services": services_status,
@@ -60,7 +65,7 @@ def get_system_status(
                 "details": isolation_check["details"],
                 "capture_engine_active": is_engine_running,
                 "capture_mode": capture_mode,
-                "notice": "V0.2 network engine operational (native AF_PACKET & L2-L4 decoding).",
+                "engine_status": engine_status,
             },
         },
         "storage": storage_metrics,
@@ -71,8 +76,8 @@ def get_system_status(
 def get_capture_telemetry(
     current_user: User = Depends(require_permission("system:view")),
 ):
-    """Retourne la télémétrie en temps réel du moteur de capture Rust V0.2."""
-    return SystemService.send_engine_ipc_command("GET_STATUS")
+    """Returns real-time Rust capture engine telemetry and IPC reachability status."""
+    return SystemService.get_engine_status()
 
 
 @router.post("/capture/start")
@@ -81,19 +86,25 @@ def start_capture_engine(
     current_user: User = Depends(require_permission("interfaces:manage")),
     db: Session = Depends(get_db),
 ):
-    """Démarre la capture réseau passive sur l'interface configurée."""
+    """Starts passive network capture on the configured capture interface."""
     res = SystemService.send_engine_ipc_command(f"START_CAPTURE {settings.CAPTURE_INTERFACE}")
+    failed = bool(res.get("error") or res.get("socket_error") or not res.get("ipc_reachable"))
     AuditService.log_event(
         db=db,
         action="CAPTURE_START",
         resource_type="ENGINE",
         resource_id=settings.CAPTURE_INTERFACE,
-        status="SUCCESS" if not res.get("error") and not res.get("socket_error") else "FAILURE",
+        status="FAILURE" if failed else "SUCCESS",
         user_email=current_user.email,
         user_id=current_user.id,
         ip_address=get_client_ip(request),
-        details={"interface": settings.CAPTURE_INTERFACE, "response": res.get("status", "UNKNOWN")},
+        details={"interface": settings.CAPTURE_INTERFACE, "response": res.get("status", "IPC_ERROR")},
     )
+    if failed:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=res.get("ipc_error") or res.get("error") or "Engine IPC unreachable",
+        )
     return res
 
 
@@ -103,19 +114,25 @@ def stop_capture_engine(
     current_user: User = Depends(require_permission("interfaces:manage")),
     db: Session = Depends(get_db),
 ):
-    """Arrête la capture réseau."""
+    """Stops passive network capture."""
     res = SystemService.send_engine_ipc_command("STOP_CAPTURE")
+    failed = bool(res.get("error") or res.get("socket_error") or not res.get("ipc_reachable"))
     AuditService.log_event(
         db=db,
         action="CAPTURE_STOP",
         resource_type="ENGINE",
         resource_id=settings.CAPTURE_INTERFACE,
-        status="SUCCESS" if not res.get("error") and not res.get("socket_error") else "FAILURE",
+        status="FAILURE" if failed else "SUCCESS",
         user_email=current_user.email,
         user_id=current_user.id,
         ip_address=get_client_ip(request),
         details={"interface": settings.CAPTURE_INTERFACE},
     )
+    if failed:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=res.get("ipc_error") or res.get("error") or "Engine IPC unreachable",
+        )
     return res
 
 
@@ -126,9 +143,7 @@ def ingest_pcap_trace(
     current_user: User = Depends(require_permission("interfaces:manage")),
     db: Session = Depends(get_db),
 ):
-    """
-    Ingère et décode un fichier trace PCAP / PCAPNG présent sur le serveur via le moteur L2-L4 Rust.
-    """
+    """Ingests and decodes a server-local PCAP / PCAPNG file via openndr-engine."""
     filepath = payload.get("filepath")
     if not filepath:
         raise HTTPException(
@@ -169,9 +184,7 @@ def upload_and_ingest_pcap(
     current_user: User = Depends(require_permission("interfaces:manage")),
     db: Session = Depends(get_db),
 ):
-    """
-    Reçoit un fichier PCAP / PCAPNG encodé en Base64 depuis la console SOC et l'analyse via openndr-engine.
-    """
+    """Receives a Base64-encoded PCAP/PCAPNG file and decodes it via openndr-engine."""
     filename = str(payload.get("filename") or "trace.pcap")
     content_b64 = payload.get("content_base64")
     if not content_b64 or not isinstance(content_b64, str):
@@ -218,17 +231,18 @@ def list_interfaces(
     current_user: User = Depends(require_permission("interfaces:view")),
 ):
     """
-    Découvre et liste les interfaces réseau réelles du système Debian.
-    Zéro donnée fictive ni fausse adresse MAC.
+    Lists real Debian host network interfaces.
+    Uncollectable hardware attributes remain null rather than using synthetic fallbacks.
     """
     real_ifaces = SystemService.get_real_network_interfaces()
     out = []
 
     for idx, iface in enumerate(real_ifaces, start=1):
-        is_capture = (iface["role"] == "CAPTURE_PASSIVE")
-        has_no_ip = (len(iface.get("ipv4_addresses", [])) == 0 and len(iface.get("ipv6_addresses", [])) == 0)
-
-        # La conformité furtive exige zéro IP pour l'interface de capture
+        is_capture = iface["role"] == "CAPTURE_PASSIVE"
+        has_no_ip = (
+            len(iface.get("ipv4_addresses", [])) == 0
+            and len(iface.get("ipv6_addresses", [])) == 0
+        )
         stealth_compliant = has_no_ip if is_capture else True
 
         out.append({
@@ -236,12 +250,16 @@ def list_interfaces(
             "name": iface["name"],
             "role": iface["role"],
             "ip_address": iface.get("ip_address"),
-            "mac_address": iface.get("mac_address", "00:00:00:00:00:00"),
+            "mac_address": iface.get("mac_address"),
             "is_promiscuous": iface.get("is_promiscuous", False),
             "is_up": iface.get("is_up", False),
-            "mtu": iface.get("mtu", 1500),
+            "mtu": iface.get("mtu"),
             "speed_mbps": iface.get("speed_mbps"),
-            "rx_dropped": 0,
+            "rx_packets": iface.get("rx_packets"),
+            "tx_packets": iface.get("tx_packets"),
+            "rx_bytes": iface.get("rx_bytes"),
+            "tx_bytes": iface.get("tx_bytes"),
+            "rx_dropped": iface.get("rx_dropped"),
             "is_stealth_compliant": stealth_compliant,
             "operstate": iface.get("operstate", "UNKNOWN"),
             "is_physical": iface.get("is_physical", False),
@@ -256,10 +274,7 @@ def list_interfaces(
 def verify_capture_isolation(
     current_user: User = Depends(require_permission("interfaces:view")),
 ):
-    """
-    Sonde de vérification réelle de l'isolation de l'interface de capture passive.
-    Contrôle l'absence d'adresses IP, l'absence de passerelle et de routes réseau.
-    """
+    """Audits passive capture interface isolation (no IP, no routes, distinct from admin)."""
     return SystemService.check_interface_isolation(settings.CAPTURE_INTERFACE)
 
 
@@ -267,12 +282,97 @@ def verify_capture_isolation(
 def get_storage_metrics(
     current_user: User = Depends(require_permission("system:view")),
 ):
-    """
-    Retourne les mesures réelles du stockage en distinguant :
-    1. L'occupation globale du disque système hôte.
-    2. L'espace réellement occupé par les fichiers PCAP et le quota dédié.
-    """
+    """Returns host filesystem usage, PCAP directory usage, and real write capability."""
     return SystemService.get_real_storage_metrics()
+
+
+@router.get("/updates")
+def get_system_updates(
+    db: Session = Depends(get_db),
+):
+    """Returns persistent update/integrity metadata from PostgreSQL (without fake dates)."""
+    try:
+        return SystemService.get_update_state(db)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Unable to read system update state from database: {exc}",
+        )
+
+
+@router.post("/updates/check")
+def check_system_updates(
+    request: Request,
+    current_user: User = Depends(require_permission("system:manage")),
+    db: Session = Depends(get_db),
+):
+    """Records a manual update/integrity verification in PostgreSQL."""
+    state = SystemService.record_update_check(db=db, user_id=current_user.id, force=False)
+    AuditService.log_event(
+        db=db,
+        action="SYSTEM_UPDATE_CHECK",
+        resource_type="SYSTEM",
+        resource_id="updates",
+        status="SUCCESS",
+        user_email=current_user.email,
+        user_id=current_user.id,
+        ip_address=get_client_ip(request),
+        details={"engine_integrity_ok": state.get("engine_integrity_ok")},
+    )
+    return {"message": "Verification completed.", "update_state": state}
+
+
+@router.post("/updates/force")
+def force_system_update(
+    request: Request,
+    current_user: User = Depends(require_permission("system:manage")),
+    db: Session = Depends(get_db),
+):
+    """Forces a local platform synchronization and engine integrity check."""
+    state = SystemService.record_update_check(db=db, user_id=current_user.id, force=True)
+    AuditService.log_event(
+        db=db,
+        action="SYSTEM_UPDATE_FORCE",
+        resource_type="SYSTEM",
+        resource_id="updates",
+        status="SUCCESS",
+        user_email=current_user.email,
+        user_id=current_user.id,
+        ip_address=get_client_ip(request),
+        details={"build_revision": state.get("build_revision")},
+    )
+    return {"message": "Platform synchronization completed.", "update_state": state}
+
+
+@router.put("/updates/config")
+def update_auto_config(
+    payload: UpdateConfigIn,
+    request: Request,
+    current_user: User = Depends(require_permission("system:manage")),
+    db: Session = Depends(get_db),
+):
+    """Persists automatic update check preferences in PostgreSQL."""
+    state = SystemService.configure_updates(
+        db=db,
+        auto_update_enabled=payload.auto_update_enabled,
+        check_interval_minutes=payload.check_interval_minutes,
+        user_id=current_user.id,
+    )
+    AuditService.log_event(
+        db=db,
+        action="SYSTEM_UPDATE_CONFIG",
+        resource_type="SYSTEM",
+        resource_id="updates",
+        status="SUCCESS",
+        user_email=current_user.email,
+        user_id=current_user.id,
+        ip_address=get_client_ip(request),
+        details={
+            "auto_update_enabled": payload.auto_update_enabled,
+            "check_interval_minutes": payload.check_interval_minutes,
+        },
+    )
+    return {"message": "Update configuration saved.", "update_state": state}
 
 
 @router.get("/audit", response_model=List[AuditLogOut])
@@ -283,7 +383,7 @@ def list_audit_logs(
     current_user: User = Depends(require_permission("audit:view")),
     db: Session = Depends(get_db),
 ):
-    """Consulte le journal d'audit de sécurité transactionnel dans PostgreSQL."""
+    """Queries transactional security audit logs in PostgreSQL."""
     query = db.query(AuditLog).order_by(AuditLog.timestamp.desc())
     if status_filter:
         query = query.filter(AuditLog.status == status_filter.upper())

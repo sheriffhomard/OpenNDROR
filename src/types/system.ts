@@ -1,9 +1,26 @@
+export type EngineOperationalStatus =
+  | 'OPERATIONAL'
+  | 'DEGRADED'
+  | 'STOPPED'
+  | 'UNAVAILABLE'
+  | 'UNKNOWN';
+
 export interface SystemService {
   name: string;
   unit: string;
-  status: 'active' | 'ready' | 'stopped' | 'failed';
+  status:
+    | 'active'
+    | 'ready'
+    | 'stopped'
+    | 'failed'
+    | 'ACTIVE'
+    | 'INACTIVE'
+    | 'FAILED'
+    | 'NOT_FOUND'
+    | 'UNKNOWN';
   description: string;
   pid?: number;
+  main_pid?: number | null;
   memoryMb?: number;
   cpuPct?: number;
   uptimeSeconds?: number;
@@ -11,46 +28,111 @@ export interface SystemService {
 
 export interface NetworkInterfaceConfig {
   name: string;
-  role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE' | 'LOOPBACK';
+  role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE' | 'LOOPBACK' | 'MONITOR';
   ipAddress: string | null;
-  macAddress: string;
+  macAddress: string | null;
   isPromiscuous: boolean;
   isUp: boolean;
-  mtu: number;
-  speedMbps: number;
-  rxPackets?: number;
-  txPackets?: number;
-  rxBytes?: number;
-  txBytes?: number;
-  rxDropped: number;
+  mtu: number | null;
+  speedMbps: number | null;
+  rxPackets?: number | null;
+  txPackets?: number | null;
+  rxBytes?: number | null;
+  txBytes?: number | null;
+  rxDropped: number | null;
   isStealthCompliant: boolean;
   complianceReason?: string;
+  operstate?: string;
+  isPhysical?: boolean;
+  ipv4Addresses?: string[];
+  ipv6Addresses?: string[];
+}
+
+export interface IsolationCheckResult {
+  interface: string;
+  status: string;
+  validation_result?: string;
+  is_isolated: boolean;
+  has_ip: boolean;
+  has_routes: boolean;
+  is_promiscuous: boolean;
+  details: string;
+  expected_config?: {
+    admin_interface: string;
+    capture_interface: string;
+    require_distinct_from_admin: boolean;
+    require_no_ip: boolean;
+    require_no_routes: boolean;
+    require_promiscuous: boolean;
+    require_link_up: boolean;
+  };
+  observed_state?: {
+    interface_exists: boolean;
+    is_same_as_admin: boolean;
+    ipv4_addresses: string[];
+    ipv6_addresses: string[];
+    routes: string[];
+    is_up: boolean;
+    operstate: string;
+    is_promiscuous: boolean;
+    capture_ready: boolean;
+  };
 }
 
 export interface StorageMetrics {
   pcapDirectory: string;
   maxStorageGb: number;
-  usedStorageGb: number;
-  usedStoragePercent?: number;
+  usedStorageGb: number | null;
+  usedStoragePercent?: number | null;
   retentionDays: number;
   maxFileDurationMin?: number;
-  pcapFilesCount?: number;
+  pcapFilesCount?: number | null;
   status?: string;
+  isWritable?: boolean;
+  writeError?: string | null;
   integrityCheckEnabled: boolean;
+  filesystem?: {
+    mount_point: string;
+    total_gb: number | null;
+    used_gb: number | null;
+    free_gb: number | null;
+    used_pct: number | null;
+    error?: string | null;
+  };
+  pcap_storage?: {
+    directory: string;
+    status: string;
+    is_writable: boolean;
+    write_error?: string | null;
+    used_bytes: number | null;
+    used_gb: number | null;
+    file_count: number | null;
+    quota_gb: number;
+    remaining_quota_gb: number | null;
+    quota_used_pct: number | null;
+    retention_days: number;
+  };
 }
 
 export interface PlatformHealth {
   status: string;
   version: string;
   target_platform: string;
-  database: { connected?: boolean; status: string };
+  database: { connected?: boolean; status: string; details?: string };
   capture_engine: {
-    version?: string;
-    mode?: string;
+    engine_status?: EngineOperationalStatus;
+    service_status?: string | null;
+    version?: string | null;
+    mode?: string | null;
+    ipc_socket?: string;
+    binary_present?: boolean;
     socket_ready?: boolean;
     socket_present?: boolean;
+    ipc_reachable?: boolean;
+    ipc_error?: string | null;
     capture_active?: boolean;
-    packets_received?: number;
+    active_interface?: string | null;
+    packets_received?: number | null;
     status?: string;
     notice?: string;
   };
@@ -107,19 +189,26 @@ export interface PacketSummary {
 }
 
 export interface EngineTelemetry {
-  engine_version: string;
+  engine_version: string | null;
+  engine_status?: EngineOperationalStatus;
+  service_status?: string | null;
+  binary_present?: boolean;
+  socket_present?: boolean;
+  ipc_reachable?: boolean;
+  ipc_error?: string | null;
   is_running: boolean;
-  capture_mode: string;
+  capture_mode: string | null;
   active_interface: string | null;
-  packets_received: number;
-  packets_dropped: number;
-  bytes_processed: number;
-  current_mbps: number;
-  ring_buffer_usage_pct: number;
-  protocol_stats: ProtocolStats;
+  packets_received: number | null;
+  packets_dropped: number | null;
+  bytes_processed: number | null;
+  current_mbps: number | null;
+  ring_buffer_usage_pct: number | null;
+  protocol_stats: ProtocolStats | null;
   last_capture_file: string | null;
   recent_packets?: PacketSummary[];
-  socket_error?: string;
+  socket_error?: string | null;
+  error?: string | null;
 }
 
 export interface PcapIngestionResult {
@@ -147,9 +236,9 @@ export interface SystemUpdateEvent {
 export interface SystemUpdateState {
   current_version: string;
   available_version: string;
-  release_date: string;
-  last_checked_at: string;
-  last_updated_at: string;
+  release_date: string | null;
+  last_checked_at: string | null;
+  last_updated_at: string | null;
   next_scheduled_check_at: string | null;
   auto_update_enabled: boolean;
   check_interval_minutes: number;

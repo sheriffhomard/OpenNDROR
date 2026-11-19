@@ -1,204 +1,290 @@
 import React, { useState } from 'react';
 import {
-  FileText,
   Search,
   Filter,
+  FileText,
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  ChevronRight,
 } from 'lucide-react';
 import { AuditLogItem } from '../types/system';
 import { HelpTooltip } from './HelpTooltip';
+import {
+  PageContainer,
+  PageHeader,
+  SectionCard,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+  DataTable,
+} from './ui';
 
 interface AuditViewProps {
   logs: AuditLogItem[];
+  isLoading?: boolean;
+  error?: string | null;
+  hasViewPermission: boolean;
+  onRetry?: () => void;
 }
 
-export const AuditView: React.FC<AuditViewProps> = ({ logs }) => {
+const STATUS_OPTIONS: { value: 'ALL' | 'SUCCESS' | 'DENIED' | 'FAILURE'; label: string }[] = [
+  { value: 'ALL', label: 'Tous' },
+  { value: 'SUCCESS', label: 'Succès' },
+  { value: 'DENIED', label: 'Refusés' },
+  { value: 'FAILURE', label: 'Échecs' },
+];
+
+export const AuditView: React.FC<AuditViewProps> = ({
+  logs,
+  isLoading = false,
+  error = null,
+  hasViewPermission,
+  onRetry,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUCCESS' | 'DENIED' | 'FAILURE'>('ALL');
   const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
 
   const filtered = logs.filter((item) => {
+    const q = searchTerm.toLowerCase();
     const matchesSearch =
-      item.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.resourceType.toLowerCase().includes(searchTerm.toLowerCase());
+      item.action.toLowerCase().includes(q) ||
+      item.userEmail.toLowerCase().includes(q) ||
+      item.resourceType.toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <span>Sensor Security &amp; Audit Log</span>
-              <HelpTooltip title="Security Audit Trail" description="Chronological record of logins, logouts, user changes, PCAP analyses, and automated update events." />
-            </h2>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Full, immutable traceability of administrative actions, authentication attempts,
-              and configuration changes across the OpenNDR platform.
-            </p>
-          </div>
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Storage: PostgreSQL / audit_logs table</span>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Journal d'audit"
+        description="Traçabilité horodatée des actions administratives, authentifications et opérations système."
+        meta={<span className="font-mono">Source : PostgreSQL / table audit_logs</span>}
+      />
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-        <div className="relative flex-1 flex items-center gap-1.5">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by action, user, or resource..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
-            />
-          </div>
-          <HelpTooltip title="Audit Log Search" description="Type any action name (e.g. AUTH_LOGIN_SUCCESS, SYSTEM_UPDATE_CHECK), email, or resource type." />
-        </div>
+      {error && <ErrorState message={error} onRetry={onRetry} />}
 
-        <div className="flex items-center gap-1 p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs shrink-0">
-          <Filter className="w-3.5 h-3.5 text-slate-400 ml-2 mr-1" />
-          {(['ALL', 'SUCCESS', 'DENIED', 'FAILURE'] as const).map((st) => (
-            <button
-              key={st}
-              type="button"
-              onClick={() => setStatusFilter(st)}
-              className={`px-2.5 py-1 rounded transition-colors ${
-                statusFilter === st
-                  ? 'bg-slate-900 dark:bg-slate-800 text-white dark:text-slate-100 font-medium'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
+      {!hasViewPermission ? (
+        <SectionCard title="Journal des événements">
+          <EmptyState
+            title="Accès restreint"
+            description="Votre rôle actuel ne dispose pas du privilège audit:view requis pour consulter le journal d'audit."
+          />
+        </SectionCard>
+      ) : (
+        <>
+          {/* Barre de recherche et de filtrage */}
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <div className="relative flex-1 flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Rechercher par action, utilisateur ou ressource..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-white dark:bg-[#181b20] border border-gray-300 dark:border-[#2c313a] rounded-md text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <HelpTooltip
+                title="Recherche dans l'audit"
+                description="Filtre les événements selon le code d'action, l'adresse e-mail de l'opérateur ou le type de ressource."
+              />
+            </div>
+
+            <div className="flex items-center gap-1 p-1 bg-white dark:bg-[#181b20] border border-gray-200 dark:border-[#2c313a] rounded-md text-xs shrink-0">
+              <Filter className="w-3.5 h-3.5 text-gray-400 ml-2 mr-1" />
+              {STATUS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setStatusFilter(opt.value)}
+                  className={`px-2.5 py-1 rounded transition-colors ${
+                    statusFilter === opt.value
+                      ? 'bg-blue-600 text-white font-medium'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <span className="pr-1">
+                <HelpTooltip
+                  title="Filtre de résultat"
+                  description="Limite la vue aux événements réussis (SUCCESS), bloqués par RBAC (DENIED) ou en échec (FAILURE)."
+                  align="right"
+                />
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* Tableau chronologique */}
+            <div>
+              <SectionCard
+                title="Événements enregistrés"
+                actions={
+                  <span className="text-xs font-mono text-gray-500 dark:text-gray-400 tabular-nums">
+                    {filtered.length} entrée(s)
+                  </span>
+                }
+                noPadding
+              >
+                {isLoading && logs.length === 0 ? (
+                  <LoadingState message="Chargement des événements d'audit..." />
+                ) : filtered.length === 0 ? (
+                  <EmptyState
+                    title="Aucun événement d'audit"
+                    description="Aucun enregistrement ne correspond aux filtres sélectionnés."
+                  />
+                ) : (
+                  <div className="max-h-[420px] overflow-y-auto">
+                    <DataTable>
+                      <thead className="bg-gray-50 dark:bg-[#111318] text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-[#2c313a]">
+                        <tr>
+                          <th className="px-4 py-2.5 font-medium">Date</th>
+                          <th className="px-4 py-2.5 font-medium">Utilisateur</th>
+                          <th className="px-4 py-2.5 font-medium">Action</th>
+                          <th className="px-4 py-2.5 font-medium">Résultat</th>
+                          <th className="px-4 py-2.5 font-medium">Adresse IP</th>
+                          <th className="px-4 py-2.5 font-medium text-right">Détails</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-[#2c313a]">
+                        {filtered.map((item) => {
+                          const isSelected = selectedLog?.id === item.id;
+                          return (
+                            <tr
+                              key={item.id}
+                              onClick={() => setSelectedLog(item)}
+                              className={`cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-50/70 dark:bg-blue-950/30'
+                                  : 'hover:bg-gray-50 dark:hover:bg-[#1f2329]'
+                              }`}
+                            >
+                              <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400 tabular-nums whitespace-nowrap">
+                                {new Date(item.timestamp).toLocaleString('fr-FR')}
+                              </td>
+                              <td className="px-4 py-2.5 font-mono text-gray-800 dark:text-gray-200 truncate max-w-[200px]">
+                                {item.userEmail}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100">
+                                  {item.action}
+                                </span>
+                                <span className="text-gray-400 mx-1.5">·</span>
+                                <span className="text-[11px] font-mono text-gray-500 dark:text-gray-400">
+                                  {item.resourceType}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex items-center gap-1 font-mono ${
+                                    item.status === 'SUCCESS'
+                                      ? 'text-emerald-700 dark:text-emerald-400'
+                                      : item.status === 'DENIED'
+                                      ? 'text-amber-700 dark:text-amber-400'
+                                      : 'text-red-700 dark:text-red-400'
+                                  }`}
+                                >
+                                  {item.status === 'SUCCESS' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                                  {item.status === 'DENIED' && <AlertTriangle className="w-3.5 h-3.5" />}
+                                  {item.status === 'FAILURE' && <XCircle className="w-3.5 h-3.5" />}
+                                  <span>{item.status}</span>
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400 tabular-nums whitespace-nowrap">
+                                {item.ipAddress}
+                              </td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedLog(item);
+                                  }}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                                >
+                                  Inspecter
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </DataTable>
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+
+            {/* Inspecteur d'événement sélectionné */}
+            <SectionCard
+              title={
+                <>
+                  <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Détails de l&apos;événement</span>
+                </>
+              }
             >
-              {st}
-            </button>
-          ))}
-          <span className="pr-1">
-            <HelpTooltip title="Outcome Status Filter" description="Filter log entries by SUCCESS, DENIED (RBAC blocked), or FAILURE (bad credentials/error)." align="right" />
-          </span>
-        </div>
-      </div>
+              {selectedLog ? (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <div className="text-gray-500 dark:text-gray-400 mb-1">Identifiant unique</div>
+                    <div className="font-mono text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-[#111318] p-2 rounded border border-gray-200 dark:border-[#2c313a]">
+                      {selectedLog.id}
+                    </div>
+                  </div>
 
-      {/* Logs Table and Detail View */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-          <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span>Timestamped Events ({filtered.length})</span>
-            <span className="font-mono">UTC Clock</span>
-          </div>
+                  <div>
+                    <div className="text-gray-500 dark:text-gray-400 mb-1">Horodatage exact (UTC)</div>
+                    <div className="font-mono text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-[#111318] p-2 rounded border border-gray-200 dark:border-[#2c313a]">
+                      {selectedLog.timestamp}
+                    </div>
+                  </div>
 
-          <div className="divide-y divide-slate-200 dark:divide-slate-800/80 max-h-[550px] overflow-y-auto">
-            {filtered.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-500">
-                No audit events match the selected criteria.
-              </div>
-            ) : (
-              filtered.map((item) => {
-                const isSelected = selectedLog?.id === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setSelectedLog(item)}
-                    className={`w-full text-left p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-3 ${
-                      isSelected ? 'bg-emerald-50/70 dark:bg-slate-800/80 ring-1 ring-inset ring-emerald-500/40' : ''
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 shrink-0">
-                        {item.status === 'SUCCESS' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                        {item.status === 'DENIED' && <AlertTriangle className="w-4 h-4 text-amber-500" />}
-                        {item.status === 'FAILURE' && <XCircle className="w-4 h-4 text-rose-500" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-semibold text-slate-900 dark:text-slate-200">{item.action}</span>
-                          <span className="text-xs text-slate-400">·</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{item.resourceType}</span>
-                        </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          By <span className="font-mono text-slate-700 dark:text-slate-300">{item.userEmail}</span> ({item.userRole})
-                        </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400 mb-1">Utilisateur</div>
+                      <div className="font-mono text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-[#111318] p-2 rounded border border-gray-200 dark:border-[#2c313a] truncate">
+                        {selectedLog.userEmail}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs font-mono text-slate-500 tabular-nums">
-                        {new Date(item.timestamp).toLocaleTimeString('en-US')}
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600" />
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400 mb-1">Rôle</div>
+                      <div className="font-mono text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-[#111318] p-2 rounded border border-gray-200 dark:border-[#2c313a] truncate">
+                        {selectedLog.userRole || 'Non renseigné'}
+                      </div>
                     </div>
-                  </button>
-                );
-              })
-            )}
+                  </div>
+
+                  <div>
+                    <div className="text-gray-500 dark:text-gray-400 mb-1">Adresse IP source</div>
+                    <div className="font-mono text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-[#111318] p-2 rounded border border-gray-200 dark:border-[#2c313a]">
+                      {selectedLog.ipAddress}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-gray-500 dark:text-gray-400 mb-1">
+                      Charge utile structurée (JSON)
+                    </div>
+                    <pre className="font-mono text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-[#111318] p-3 rounded border border-gray-200 dark:border-[#2c313a] overflow-x-auto text-xs leading-relaxed">
+                      {JSON.stringify(selectedLog.details, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-10 text-center text-xs text-gray-500 dark:text-gray-400">
+                  Sélectionnez une ligne dans le journal pour inspecter ses métadonnées complètes.
+                </div>
+              )}
+            </SectionCard>
           </div>
-        </div>
-
-        {/* Selected Log Inspector */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-900 dark:text-slate-200 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <FileText className="w-4 h-4 text-emerald-500" />
-            <span>Audit Event Details</span>
-            <HelpTooltip title="Structured Event Inspector" description="Shows exact metadata for the clicked event row, with sensitive secrets automatically redacted." align="right" />
-          </div>
-
-          {selectedLog ? (
-            <div className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <span className="text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
-                  <span>Unique Identifier</span>
-                  <HelpTooltip title="Audit Record ID" description="Sequential primary key of this immutable log row." />
-                </span>
-                <div className="font-mono text-slate-900 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 p-2 rounded border border-slate-200 dark:border-slate-800">
-                  {selectedLog.id}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
-                  <span>Exact Timestamp</span>
-                  <HelpTooltip title="ISO-8601 UTC Time" description="Exact UTC moment the operation was recorded on the server." />
-                </span>
-                <div className="font-mono text-slate-900 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 p-2 rounded border border-slate-200 dark:border-slate-800">
-                  {selectedLog.timestamp}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
-                  <span>Network Origin</span>
-                  <HelpTooltip title="Source Client IP" description="IP address of the browser or operator workstation that initiated this request." />
-                </span>
-                <div className="font-mono text-slate-900 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 p-2 rounded border border-slate-200 dark:border-slate-800">
-                  {selectedLog.ipAddress}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
-                  <span>Structured Payload (JSONB)</span>
-                  <HelpTooltip title="Event Metadata" description="Additional context recorded by the backend (file path, version, reason) with passwords redacted." />
-                </span>
-                <pre className="font-mono text-emerald-700 dark:text-emerald-400 bg-slate-50 dark:bg-slate-950 p-3 rounded border border-slate-200 dark:border-slate-800 overflow-x-auto text-xs leading-relaxed">
-                  {JSON.stringify(selectedLog.details, null, 2)}
-                </pre>
-              </div>
-            </div>
-          ) : (
-            <div className="py-12 text-center text-xs text-slate-500">
-              Select an event from the list to inspect its full payload.
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    </PageContainer>
   );
 };

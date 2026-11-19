@@ -11,17 +11,17 @@ export interface SystemService {
 
 export interface NetworkInterfaceConfig {
   name: string;
-  role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE';
+  role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE' | 'LOOPBACK';
   ipAddress: string | null;
   macAddress: string;
   isPromiscuous: boolean;
   isUp: boolean;
   mtu: number;
   speedMbps: number;
-  rxPackets: number;
-  txPackets: number;
-  rxBytes: number;
-  txBytes: number;
+  rxPackets?: number;
+  txPackets?: number;
+  rxBytes?: number;
+  txBytes?: number;
   rxDropped: number;
   isStealthCompliant: boolean;
   complianceReason?: string;
@@ -31,16 +31,37 @@ export interface StorageMetrics {
   pcapDirectory: string;
   maxStorageGb: number;
   usedStorageGb: number;
+  usedStoragePercent?: number;
   retentionDays: number;
-  maxFileDurationMin: number;
+  maxFileDurationMin?: number;
+  pcapFilesCount?: number;
+  status?: string;
   integrityCheckEnabled: boolean;
+}
+
+export interface PlatformHealth {
+  status: string;
+  version: string;
+  target_platform: string;
+  database: { connected?: boolean; status: string };
+  capture_engine: {
+    version?: string;
+    mode?: string;
+    socket_ready?: boolean;
+    socket_present?: boolean;
+    capture_active?: boolean;
+    packets_received?: number;
+    status?: string;
+    notice?: string;
+  };
+  timestamp: string;
 }
 
 export interface AuditLogItem {
   id: string;
   timestamp: string;
   userEmail: string;
-  userRole: string;
+  userRole: string | null;
   action: string;
   resourceType: string;
   resourceId: string;

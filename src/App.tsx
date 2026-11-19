@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { registerSW } from 'virtual:pwa-register';
-import { Header } from './components/Header';
-import { Navigation, TabId } from './components/Navigation';
-import { HamburgerMenu } from './components/HamburgerMenu';
+import { Sidebar } from './components/Sidebar';
+import { TopBar, BackendConnectionState } from './components/TopBar';
 import { DashboardView } from './components/DashboardView';
 import { CaptureView } from './components/CaptureView';
 import { InterfacesView } from './components/InterfacesView';
@@ -13,11 +12,12 @@ import { SystemSettingsView } from './components/SystemSettingsView';
 import { DocsView } from './components/DocsView';
 import { LoginModal } from './components/LoginModal';
 import { LegalOnboardingModal } from './components/LegalOnboardingModal';
-import { ContextualOnboarding } from './components/ContextualOnboarding';
 import { useTheme } from './hooks/useTheme';
-import { apiService } from './services/api';
+import { apiService, ApiError } from './services/api';
+import { NavSectionId, getNavItemById } from './config/navigation';
 import { User, UserRole } from './types/auth';
 import {
+  PlatformHealth,
   SystemService,
   NetworkInterfaceConfig,
   StorageMetrics,
@@ -25,15 +25,38 @@ import {
   EngineTelemetry,
   SystemUpdateState,
 } from './types/system';
-import { ShieldCheck, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 const LEGAL_ACCEPTED_KEY = 'openndr_legal_accepted_v1';
-const GUIDE_VISIBLE_KEY = 'openndr_show_guide_v1';
+const SIDEBAR_COLLAPSED_KEY = 'openndr_sidebar_collapsed';
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  return fallback;
+}
 
 export default function App() {
   const { theme, setTheme, toggleTheme } = useTheme();
   const [currentUser, setCurrentUser] = useState<User | null>(apiService.getCurrentUser());
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [activeSection, setActiveSection] = useState<NavSectionId>('dashboard');
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Connection & refresh metadata
+  const [connectionState, setConnectionState] = useState<BackendConnectionState>('checking');
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Live backend domain states
+  const [health, setHealth] = useState<PlatformHealth | null>(null);
   const [services, setServices] = useState<SystemService[]>([]);
   const [interfaces, setInterfaces] = useState<NetworkInterfaceConfig[]>([]);
   const [storage, setStorage] = useState<StorageMetrics | null>(null);
@@ -42,8 +65,16 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [updateState, setUpdateState] = useState<SystemUpdateState | null>(null);
 
+  // Explicit per-domain error states (never hidden behind fake defaults)
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [telemetryError, setTelemetryError] = useState<string | null>(null);
+  const [interfacesError, setInterfacesError] = useState<string | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [updatesError, setUpdatesError] = useState<string | null>(null);
+
+  // Modals & action busy flags
   const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isForcingUpdate, setIsForcingUpdate] = useState(false);
   const [isSavingUpdateConfig, setIsSavingUpdateConfig] = useState(false);
@@ -63,29 +94,25 @@ export default function App() {
     }
   });
 
-  const [showGuide, setShowGuide] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(GUIDE_VISIBLE_KEY);
-      return saved === null ? true : saved === 'true';
-    } catch {
-      return true;
-    }
-  });
-
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((type: 'success' | 'error', text: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage({ type, text });
-    setTimeout(() => setToastMessage(null), 4000);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000);
   }, []);
 
-  const handleSetShowGuide = useCallback((visible: boolean) => {
-    setShowGuide(visible);
-    try {
-      localStorage.setItem(GUIDE_VISIBLE_KEY, String(visible));
-    } catch {
-      // ignore
-    }
+  const handleToggleCollapse = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
   }, []);
 
   const handleAcceptLegal = useCallback(() => {
@@ -94,87 +121,148 @@ export default function App() {
     try {
       localStorage.setItem(LEGAL_ACCEPTED_KEY, 'true');
     } catch {
-      // ignore
+      // ignore storage errors
     }
-    showToast('success', 'Legal notice acknowledged.');
+    showToast('success', 'Mentions légales enregistrées.');
   }, [showToast]);
+
+  const clearOperationalData = useCallback(() => {
+    setServices([]);
+    setInterfaces([]);
+    setStorage(null);
+    setTelemetry(null);
+    setUsers([]);
+    setAuditLogs([]);
+  }, []);
 
   const refreshUpdateState = useCallback(async () => {
     try {
       const state = await apiService.getUpdateStatus();
       setUpdateState(state);
-    } catch {
-      // ignore temporary update fetch errors
+      setUpdatesError(null);
+    } catch (err: unknown) {
+      setUpdateState(null);
+      setUpdatesError(
+        extractErrorMessage(err, 'Impossible de récupérer l\'état des mises à jour.')
+      );
     }
   }, []);
 
-  // Synchronizes real telemetry & RBAC data from /api/v1
   const refreshData = useCallback(async () => {
-    await refreshUpdateState();
+    setIsRefreshing(true);
 
-    if (!apiService.isAuthenticated()) {
-      setServices([]);
-      setInterfaces([]);
-      setStorage(null);
-      setTelemetry(null);
-      setUsers([]);
-      setAuditLogs([]);
+    try {
+      const healthData = await apiService.getHealth();
+      setHealth(healthData);
+      setConnectionState('connected');
+      setLastRefreshedAt(new Date().toISOString());
+    } catch (err: unknown) {
+      setHealth(null);
+      setConnectionState('unavailable');
+      clearOperationalData();
+      setUpdateState(null);
+      const msg = extractErrorMessage(err, 'Serveur backend inaccessible.');
+      setStatusError(msg);
+      setTelemetryError(msg);
+      setInterfacesError(msg);
+      setUsersError(msg);
+      setAuditError(msg);
+      setUpdatesError(msg);
+      setIsRefreshing(false);
       return;
     }
 
-    try {
-      const statusData = await apiService.getSystemStatus();
-      setServices(statusData.services || []);
-      if (statusData.engine) {
-        setTelemetry(statusData.engine);
+    await refreshUpdateState();
+
+    if (!apiService.isAuthenticated()) {
+      clearOperationalData();
+      setStatusError(null);
+      setTelemetryError(null);
+      setInterfacesError(null);
+      setUsersError(null);
+      setAuditError(null);
+      setIsRefreshing(false);
+      return;
+    }
+
+    const [statusRes, telemetryRes, interfacesRes, storageRes] = await Promise.allSettled([
+      apiService.getSystemStatus(),
+      apiService.getCaptureTelemetry(),
+      apiService.getInterfaces(),
+      apiService.getStorageMetrics(),
+    ]);
+
+    if (statusRes.status === 'fulfilled') {
+      setServices(statusRes.value.services || []);
+      if (statusRes.value.engine && telemetryRes.status !== 'fulfilled') {
+        setTelemetry(statusRes.value.engine);
       }
-    } catch {
-      // Ignore if backend is momentarily unavailable
+      setStatusError(null);
+    } else {
+      setServices([]);
+      setStatusError(
+        extractErrorMessage(statusRes.reason, 'Impossible de lire l\'état des services.')
+      );
     }
 
-    try {
-      const telem = await apiService.getCaptureTelemetry();
-      setTelemetry(telem);
-    } catch {
-      // Ignore if unavailable
+    if (telemetryRes.status === 'fulfilled') {
+      setTelemetry(telemetryRes.value);
+      setTelemetryError(null);
+    } else {
+      if (statusRes.status !== 'fulfilled') {
+        setTelemetry(null);
+      }
+      setTelemetryError(
+        extractErrorMessage(telemetryRes.reason, 'Télémétrie de capture indisponible.')
+      );
     }
 
-    try {
-      const ifaces = await apiService.getInterfaces();
-      setInterfaces(ifaces);
-    } catch {
-      // Ignore if unavailable
+    if (interfacesRes.status === 'fulfilled') {
+      setInterfaces(interfacesRes.value);
+      setInterfacesError(null);
+    } else {
+      setInterfaces([]);
+      setInterfacesError(
+        extractErrorMessage(interfacesRes.reason, 'Impossible de charger les interfaces réseau.')
+      );
     }
 
-    try {
-      const stor = await apiService.getStorageMetrics();
-      setStorage(stor);
-    } catch {
-      // Ignore if unavailable
+    if (storageRes.status === 'fulfilled') {
+      setStorage(storageRes.value);
+    } else {
+      setStorage(null);
     }
 
     if (apiService.hasPermission('users:view')) {
       try {
         const uList = await apiService.getUsers();
         setUsers(uList);
-      } catch {
+        setUsersError(null);
+      } catch (err: unknown) {
         setUsers([]);
+        setUsersError(extractErrorMessage(err, 'Impossible de charger les utilisateurs.'));
       }
     } else {
       setUsers([]);
+      setUsersError(null);
     }
 
     if (apiService.hasPermission('audit:view')) {
       try {
         const logs = await apiService.getAuditLogs(50, 0);
         setAuditLogs(logs);
-      } catch {
+        setAuditError(null);
+      } catch (err: unknown) {
         setAuditLogs([]);
+        setAuditError(extractErrorMessage(err, 'Impossible de charger le journal d\'audit.'));
       }
     } else {
       setAuditLogs([]);
+      setAuditError(null);
     }
-  }, [refreshUpdateState]);
+
+    setIsRefreshing(false);
+  }, [clearOperationalData, refreshUpdateState]);
 
   useEffect(() => {
     const unsubscribe = apiService.onAuthStateChange((user) => {
@@ -182,7 +270,6 @@ export default function App() {
       refreshData();
     });
 
-    refreshData();
     const interval = setInterval(refreshData, 10000);
     return () => {
       unsubscribe();
@@ -190,7 +277,19 @@ export default function App() {
     };
   }, [refreshData]);
 
-  // Register PWA Service Worker with automatic background updates
+  // Enforce RBAC visibility on active section when logging out or changing role
+  useEffect(() => {
+    const item = getNavItemById(activeSection);
+    const forbiddenByAuth = item.requiresAuth && !currentUser;
+    const forbiddenByPerm =
+      item.requiredPermission && !currentUser?.permissions.includes(item.requiredPermission);
+
+    if (forbiddenByAuth || forbiddenByPerm) {
+      setActiveSection('dashboard');
+    }
+  }, [activeSection, currentUser]);
+
+  // Register PWA Service Worker with silent background updates
   useEffect(() => {
     let swTimer: ReturnType<typeof setInterval> | null = null;
     try {
@@ -205,12 +304,9 @@ export default function App() {
             }, 15 * 60 * 1000);
           }
         },
-        onOfflineReady() {
-          // Shell cached cleanly
-        },
       });
     } catch {
-      // Ignore SW registration in unsupported contexts
+      // Ignore SW registration in unsupported environments
     }
     return () => {
       if (swTimer) clearInterval(swTimer);
@@ -227,13 +323,22 @@ export default function App() {
     return () => clearInterval(timer);
   }, [updateState?.auto_update_enabled, updateState?.check_interval_minutes, refreshUpdateState]);
 
+  const handleSelectSection = useCallback(
+    (section: NavSectionId) => {
+      setActiveSection(section);
+      setMobileMenuOpen(false);
+      refreshData();
+    },
+    [refreshData]
+  );
+
   const handleLogin = async (email: string, pass: string) => {
     try {
       await apiService.login(email, pass);
       await refreshData();
-      showToast('success', 'SOC authentication succeeded');
+      showToast('success', 'Authentification réussie.');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Authentication error';
+      const msg = extractErrorMessage(err, 'Erreur d\'authentification.');
       showToast('error', msg);
       throw err;
     }
@@ -243,9 +348,9 @@ export default function App() {
     try {
       await apiService.logout();
       await refreshData();
-      showToast('success', 'Session signed out and JWT token revoked');
+      showToast('success', 'Session fermée et jeton JWT révoqué.');
     } catch {
-      showToast('success', 'Signed out');
+      showToast('success', 'Session fermée.');
     }
   };
 
@@ -253,9 +358,9 @@ export default function App() {
     try {
       await apiService.toggleUserActive(userId);
       await refreshData();
-      showToast('success', 'User account status updated');
+      showToast('success', 'Statut du compte utilisateur mis à jour.');
     } catch (err: unknown) {
-      if (err instanceof Error) showToast('error', err.message);
+      showToast('error', extractErrorMessage(err, 'Erreur lors de la mise à jour du compte.'));
     }
   };
 
@@ -273,10 +378,10 @@ export default function App() {
         password: data.password,
       });
       await refreshData();
-      showToast('success', `Account ${data.email} created successfully`);
+      showToast('success', `Compte ${data.email} créé avec succès.`);
       return res;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error creating account';
+      const msg = extractErrorMessage(err, 'Erreur lors de la création du compte.');
       showToast('error', msg);
       throw err;
     }
@@ -290,7 +395,7 @@ export default function App() {
       showToast('success', res.message);
       await refreshData();
     } catch (err: unknown) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to check for updates');
+      showToast('error', extractErrorMessage(err, 'Échec de la vérification des mises à jour.'));
     } finally {
       setIsCheckingUpdate(false);
     }
@@ -304,7 +409,7 @@ export default function App() {
       showToast('success', res.message);
       await refreshData();
     } catch (err: unknown) {
-      showToast('error', err instanceof Error ? err.message : 'Force update failed');
+      showToast('error', extractErrorMessage(err, 'Échec de la mise à jour forcée.'));
     } finally {
       setIsForcingUpdate(false);
     }
@@ -318,179 +423,186 @@ export default function App() {
       showToast('success', res.message);
       await refreshData();
     } catch (err: unknown) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to save auto-update settings');
+      showToast('error', extractErrorMessage(err, 'Échec d\'enregistrement de la configuration.'));
     } finally {
       setIsSavingUpdateConfig(false);
     }
   };
 
-  const hasViolation = interfaces.some((i) => i.role === 'CAPTURE_PASSIVE' && !i.isStealthCompliant);
+  const hasInterfaceViolation = interfaces.some(
+    (i) => i.role === 'CAPTURE_PASSIVE' && !i.isStealthCompliant
+  );
+  const platformVersion = updateState?.current_version || health?.version || null;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
+    <div className="min-h-screen bg-[#f3f4f6] dark:bg-[#111318] text-gray-900 dark:text-gray-100 flex font-sans">
       {/* Toast notifications */}
       {toastMessage && (
-        <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-50"
+        >
           <div
-            className={`px-4 py-3 rounded-lg border text-xs shadow-xl flex items-center gap-2.5 max-w-md ${
+            className={`px-4 py-3 rounded-md border text-xs shadow-lg flex items-center gap-2.5 max-w-md ${
               toastMessage.type === 'success'
-                ? 'bg-white dark:bg-slate-900 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
-                : 'bg-white dark:bg-slate-900 border-rose-500/50 text-rose-700 dark:text-rose-300'
+                ? 'bg-white dark:bg-[#181b20] border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300'
+                : 'bg-white dark:bg-[#181b20] border-red-300 dark:border-red-700 text-red-800 dark:text-red-300'
             }`}
           >
             {toastMessage.type === 'success' ? (
-              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600 dark:text-red-400" />
             )}
             <span>{toastMessage.text}</span>
           </div>
         </div>
       )}
 
-      {/* Main Top Header */}
-      <Header
+      {/* Single unified navigation sidebar (desktop persistent + mobile drawer) */}
+      <Sidebar
+        activeSection={activeSection}
+        onSelectSection={handleSelectSection}
         currentUser={currentUser}
-        onLogout={handleLogout}
-        onOpenLogin={() => setIsLoginOpen(true)}
-        onOpenMenu={() => setIsMenuOpen(true)}
-        onOpenSettings={() => {
-          setActiveTab('settings');
-          refreshUpdateState();
-        }}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        showGuide={showGuide}
-        onToggleGuide={() => handleSetShowGuide(!showGuide)}
-        updateAvailable={updateState?.update_available}
-        onNotify={showToast}
+        platformVersion={platformVersion}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={handleToggleCollapse}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
+        hasInterfaceViolation={hasInterfaceViolation}
+        updateAvailable={Boolean(updateState?.update_available)}
       />
 
-      {/* Categorized Hamburger Menu Drawer */}
-      <HamburgerMenu
-        isOpen={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
-        activeTab={activeTab}
-        onSelectTab={(tab) => {
-          setActiveTab(tab);
-          refreshData();
-        }}
-        hasViolation={hasViolation}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        showGuide={showGuide}
-        onToggleGuide={() => handleSetShowGuide(!showGuide)}
-        onOpenLegal={() => setIsLegalModalOpen(true)}
-        onNotify={showToast}
-      />
-
-      {/* Module Navigation */}
-      <Navigation
-        activeTab={activeTab}
-        onSelectTab={(tab) => {
-          setActiveTab(tab);
-          refreshData();
-        }}
-        hasViolation={hasViolation}
-        updateAvailable={updateState?.update_available}
-      />
-
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <ContextualOnboarding
-          activeTab={activeTab}
-          isVisible={showGuide}
-          isAuthenticated={Boolean(currentUser)}
-          onDismiss={() => handleSetShowGuide(false)}
+      {/* Main Content Shell */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopBar
+          activeSection={activeSection}
+          currentUser={currentUser}
+          connectionState={connectionState}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onOpenLogin={() => setIsLoginOpen(true)}
+          onLogout={handleLogout}
         />
 
-        {activeTab === 'dashboard' && (
-          <DashboardView
-            services={services}
-            interfaces={interfaces}
-            storage={storage}
-            telemetry={telemetry}
-            canManageSystem={apiService.hasPermission('system:manage')}
-            onNavigateToCapture={() => setActiveTab('capture')}
-            onNavigateToInterfaces={() => setActiveTab('interfaces')}
-            onNavigateToValidation={() => setActiveTab('validation')}
-          />
-        )}
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {activeSection === 'dashboard' && (
+            <DashboardView
+              isAuthenticated={Boolean(currentUser)}
+              connectionState={connectionState}
+              lastRefreshedAt={lastRefreshedAt}
+              isRefreshing={isRefreshing}
+              onRefresh={refreshData}
+              health={health}
+              services={services}
+              interfaces={interfaces}
+              storage={storage}
+              telemetry={telemetry}
+              auditLogs={auditLogs}
+              updateState={updateState}
+              statusError={statusError}
+              onOpenLogin={() => setIsLoginOpen(true)}
+              onNavigateToCapture={() => handleSelectSection('capture')}
+              onNavigateToInterfaces={() => handleSelectSection('interfaces')}
+              onNavigateToDiagnostics={() => handleSelectSection('diagnostics')}
+            />
+          )}
 
-        {activeTab === 'capture' && (
-          <CaptureView
-            telemetry={telemetry}
-            canManageCapture={apiService.hasPermission('interfaces:manage')}
-            onRefreshTelemetry={refreshData}
-            onNotify={showToast}
-          />
-        )}
+          {activeSection === 'capture' && (
+            <CaptureView
+              telemetry={telemetry}
+              telemetryError={telemetryError}
+              canManageCapture={apiService.hasPermission('interfaces:manage')}
+              onRefreshTelemetry={refreshData}
+              onNotify={showToast}
+            />
+          )}
 
-        {activeTab === 'interfaces' && (
-          <InterfacesView
-            interfaces={interfaces}
-            canManageInterfaces={apiService.hasPermission('interfaces:manage')}
-          />
-        )}
+          {activeSection === 'interfaces' && (
+            <InterfacesView
+              interfaces={interfaces}
+              interfacesError={interfacesError}
+              onRefresh={refreshData}
+            />
+          )}
 
-        {activeTab === 'rbac' && (
-          <RbacView
-            users={users}
-            canManageUsers={apiService.hasPermission('users:manage')}
-            onToggleUserActive={handleToggleUserActive}
-            onCreateUser={handleCreateUser}
-          />
-        )}
+          {activeSection === 'rbac' && (
+            <RbacView
+              users={users}
+              isLoading={isRefreshing}
+              error={usersError}
+              hasViewPermission={apiService.hasPermission('users:view')}
+              canManageUsers={apiService.hasPermission('users:manage')}
+              currentUserEmail={currentUser?.email || null}
+              onRetry={refreshData}
+              onToggleUserActive={handleToggleUserActive}
+              onCreateUser={handleCreateUser}
+            />
+          )}
 
-        {activeTab === 'audit' && <AuditView logs={auditLogs} />}
+          {activeSection === 'audit' && (
+            <AuditView
+              logs={auditLogs}
+              isLoading={isRefreshing}
+              error={auditError}
+              hasViewPermission={apiService.hasPermission('audit:view')}
+              onRetry={refreshData}
+            />
+          )}
 
-        {activeTab === 'validation' && <ValidationView />}
+          {activeSection === 'diagnostics' && (
+            <ValidationView isAuthenticated={Boolean(currentUser)} />
+          )}
 
-        {activeTab === 'settings' && (
-          <SystemSettingsView
-            updateState={updateState}
-            isCheckingUpdate={isCheckingUpdate}
-            isForcingUpdate={isForcingUpdate}
-            isSavingConfig={isSavingUpdateConfig}
-            onCheckForUpdates={handleCheckForUpdates}
-            onForceUpdate={handleForceUpdate}
-            onUpdateAutoConfig={handleUpdateAutoConfig}
-            theme={theme}
-            onSetTheme={setTheme}
-            showGuide={showGuide}
-            onSetShowGuide={handleSetShowGuide}
-            onOpenLegalModal={() => setIsLegalModalOpen(true)}
-            onNotify={showToast}
-          />
-        )}
+          {activeSection === 'settings' && (
+            <SystemSettingsView
+              health={health}
+              updateState={updateState}
+              isLoadingUpdates={isRefreshing}
+              updatesError={updatesError}
+              onRetryUpdates={refreshData}
+              isCheckingUpdate={isCheckingUpdate}
+              isForcingUpdate={isForcingUpdate}
+              isSavingConfig={isSavingUpdateConfig}
+              onCheckForUpdates={handleCheckForUpdates}
+              onForceUpdate={handleForceUpdate}
+              onUpdateAutoConfig={handleUpdateAutoConfig}
+              theme={theme}
+              onSetTheme={setTheme}
+              onOpenLegalModal={() => setIsLegalModalOpen(true)}
+              onNotify={showToast}
+            />
+          )}
 
-        {activeTab === 'docs' && <DocsView />}
-      </main>
+          {activeSection === 'docs' && <DocsView />}
+        </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950 py-4 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span>OpenNDR v0.2.0 · Autonomous Network Engine licensed under AGPL-3.0</span>
-            <span>·</span>
+        {/* Minimal sober footer */}
+        <footer className="border-t border-gray-200 dark:border-[#2c313a] bg-white dark:bg-[#181b20] py-3.5 text-xs text-gray-500 dark:text-gray-400">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>
+                OpenNDR{platformVersion ? ` v${platformVersion}` : ''} · Licence AGPL-3.0
+              </span>
+              {health?.target_platform && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{health.target_platform}</span>
+                </>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setIsLegalModalOpen(true)}
-              className="underline hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
+              className="underline hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
             >
-              Legal Notice &amp; Data Disclaimer
+              Mentions légales et non-responsabilité
             </button>
           </div>
-          <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400">
-            <span>Debian 13 (Trixie)</span>
-            <span>·</span>
-            <span>PostgreSQL &amp; Alembic</span>
-            <span>·</span>
-            <span>Argon2id RBAC</span>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
 
       {/* Legal Onboarding & Liability Disclaimer Modal */}
       <LegalOnboardingModal

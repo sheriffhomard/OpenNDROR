@@ -1,87 +1,122 @@
-# OpenNDR — Open Source Network Detection and Response
+<div align="center">
+  <img src="public/icon.svg" alt="OpenNDR Official Logo" width="84" height="84" />
+  <h1>OpenNDR — Open Source Network Detection and Response</h1>
+  <p><strong>Plateforme NDR souveraine autonome pour Debian 13 · Capture Passive <code>AF_PACKET</code> · Décodage L2–L4 · Console PWA Clair/Sombre</strong></p>
 
-**Dépôt officiel** : https://github.com/sheriffhomard/OpenNDROR  
-**Version actuelle** : V0.2 (`0.2.0`) — Capture Passive `AF_PACKET` & Décodage Hiérarchique L2–L4  
-**Licence** : AGPL-3.0  
-**Système d'exploitation cible** : Debian 13 (Trixie) GNU/Linux  
-
----
-
-## 1. Présentation Générale
-
-OpenNDR est une plateforme open source souveraine de **Network Detection and Response (NDR)** autonome pour Debian 13.
-Conçue pour les centres opérationnels de sécurité (SOC) et les infrastructures critiques, elle fournit une capture passive zéro-émission, un décodage protocolaire L2–L4 natif en Rust et une console d'administration durcie, sans dépendance cloud ni sonde propriétaire tierce.
-
-> **Principe d'indépendance et d'honnêteté technique** : OpenNDR intègre ses propres composants natifs (moteur Rust `openndr-engine`, backend FastAPI, frontend React) sans dépendre de Suricata, Zeek ou Arkime, et ne simule **aucune** donnée réseau ni aucun état système.
+  ![Version](https://img.shields.io/badge/Version-V0.2%20(0.2.0)-10b981?style=flat-square)
+  ![Platform](https://img.shields.io/badge/OS-Debian%2013%20(Trixie)-0f172a?style=flat-square&logo=debian&logoColor=white)
+  ![Engine](https://img.shields.io/badge/Engine-Rust%20AF__PACKET%20V0.2-ea580c?style=flat-square&logo=rust&logoColor=white)
+  ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20PostgreSQL-0284c7?style=flat-square&logo=fastapi&logoColor=white)
+  ![Frontend](https://img.shields.io/badge/Console-React%2019%20%2B%20PWA%20Ready-6366f1?style=flat-square&logo=react&logoColor=white)
+  ![License](https://img.shields.io/badge/License-AGPL--3.0-f59e0b?style=flat-square)
+</div>
 
 ---
 
-## 2. Périmètre et État Réel de la Version V0.2
-
-| Composant | État V0.2 | Description technique vérifiée |
-|---|---|---|
-| **Backend REST** | **Implémenté & Testé** | FastAPI, Pydantic V2, SQLAlchemy 2.0, pool PostgreSQL durci (`pytest` : 21/21 tests passés) |
-| **Authentification** | **Implémenté & Testé** | Argon2id natif obligatoire en production, rejet absolu des secrets par défaut |
-| **Sessions & Révocation JWT** | **Implémenté & Testé** | Claims stricts (`sub`, `iss`, `aud`, `exp`, `iat`, `jti`), révocation persistante multi-workers (`revoked_tokens`) |
-| **Contrôle d'accès (RBAC)** | **Implémenté & Testé** | 3 rôles (`Administrator`, `Analyst`, `Observer`) et 8 permissions vérifiés côté serveur |
-| **Bootstrap Admin & Audit** | **Implémenté & Testé** | CLI `openndr-admin create-first-admin`, journal `audit_logs` append-only (UTC, IP, JSONB) |
-| **Moteur Réseau Rust (`openndr-engine`)** | **Implémenté & Testé** | Binaire natif `0.2.0` (`cargo test` : 11/11 tests passés), socket IPC `/run/openndr/engine.sock`, CLI `--check-config` / `--ingest` |
-| **Capture Passive `AF_PACKET`** | **Implémenté & Testé** | Ring buffer zéro-copie `PACKET_MMAP` (`TPACKET_V2`), mode promiscuous sans IP sur l'interface SPAN |
-| **Ingestion & Écriture PCAP** | **Implémenté & Testé** | Lecteur `.pcap` / `.pcapng` (`upload-pcap` & `ingest-pcap`) et écriture rotative locale (`/var/lib/openndr/captures/`) |
-| **Décodeur Hiérarchique L2–L4** | **Implémenté & Testé** | Ethernet II, VLAN 802.1Q, ARP, IPv4, IPv6, ICMP (v4/v6), TCP (flags & options), UDP |
-| **Console Web SOC** | **Implémenté & Testé** | React 19, TypeScript, Tailwind CSS : Tableau de bord, Capture & Décodage V0.2, Interfaces, RBAC, Audit, Sondes de recette |
-| **Suivi de flux & DPI L7** | *Prévu en V0.3* | Reconstruction bidirectionnelle TCP/UDP, analyseurs DNS / HTTP / TLS (SNI, JA3/JA4) / SSH non encore implémentés |
-| **Moteur de détection & Corrélation** | *Prévu en V0.4 / V0.5* | Règles par signatures, heuristiques (scan, tunnel DNS) et dossiers d'incident non encore implémentés |
+- 🌐 **Dépôt officiel** : https://github.com/sheriffhomard/OpenNDROR
+- 🚀 **Version actuelle** : V0.2 (`0.2.0`) — Capture Passive `AF_PACKET`, Décodage L2–L4, Console unifiée sobre Clair/Sombre & PWA
+- ⚖️ **Licence** : AGPL-3.0
+- 🐧 **Système d'exploitation cible** : Debian 13 (Trixie) GNU/Linux
+- 📚 **Documents connexes** : [`CONTEXT.md`](CONTEXT.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`docs/ROADMAP.md`](docs/ROADMAP.md) · [`docs/SECURITY.md`](docs/SECURITY.md)
 
 ---
 
-## 3. Captures d'Écran de l'Application (OpenNDR V0.2)
+## 🧭 1. Présentation Générale
 
-Toutes les captures ci-dessous ont été réalisées directement sur l'application **OpenNDR v0.2.0** en cours d'exécution (`1440×900`) avec authentification réelle, journalisation d'audit effective et ingestion d'une trace réseau `.pcap` décodée par le binaire natif Rust `openndr-engine`.
+**OpenNDR** est une plateforme open source souveraine de **Network Detection and Response (NDR)** autonome pour Debian 13. Conçue pour une exploitation quotidienne en production, elle associe une capture passive zéro-émission, un décodage protocolaire L2–L4 natif en Rust et une console d'administration web sobre et cohérente en thèmes **Clair** et **Sombre**.
 
-### 3.1 Tableau de Bord de Supervision SOC
-![Tableau de bord OpenNDR V0.2](docs/screenshots/01-dashboard.png)
-*Vue générale affichant l'état du moteur Rust (`v0.2.0`, 6 paquets décodés), le contrôle de conformité furtive (ici en alerte réelle `VIOLATION DÉTECTÉE` car l'interface de capture dispose d'une adresse IP assignée par l'environnement d'exécution), les quotas de stockage PCAP local (`0 / 500 Go`, rétention `30 jours`), l'état des 4 services (`openndr-backend`, `openndr-engine`, `postgresql`, `openndr-web`) et la séparation des interfaces (`eth2` Administration vs `eth1` Capture Passive).*
+> 🛡️ **Principe d'indépendance et d'honnêteté technique** : OpenNDR intègre ses propres composants natifs (moteur Rust `openndr-engine`, backend FastAPI, frontend React/PWA) sans dépendre de Suricata, Zeek ou Arkime, et n'affiche **aucune** donnée fictive, simulée ou estimée. En cas d'indisponibilité ou d'absence de configuration, l'interface indique explicitement l'état réel (`Indisponible`, `Non configuré`, `Aucune donnée de capture disponible`).
+>
+> ⚖️ **Mention légale de non-responsabilité** : L'auteur et les contributeurs d'OpenNDR ne sont pas responsables des données (traces PCAP/PCAPNG, adresses IP, journaux, comptes ou charges utiles) fournies, téléversées ou analysées dans l'application. Une modale d'acceptation légale s'affiche au premier lancement.
 
-### 3.2 Capture Passive & Décodage Hiérarchique L2–L4 (V0.2)
-![Capture et décodage L2-L4 OpenNDR V0.2](docs/screenshots/02-capture-decoding.png)
-*Console d'exploitation du moteur de capture V0.2 : télémétrie temps réel (débit en fenêtre glissante 1s, compteurs noyau `PACKET_STATISTICS` captures/pertes, volume utile traité, saturation anneau `TPACKET_V2`), répartition protocolaire L2–L4 (`TCP`, `UDP`, `ICMP`, `ARP`, compteurs `IPv4`, `IPv6`, `VLAN 802.1Q`), module d'import `.pcap` / `.pcapng` et inspecteur filtrable des trames décodées par le parser Rust (horodatage, VLAN, adresses/ports source & destination, drapeaux TCP, taille et détail L2–L4).*
+---
 
-### 3.3 Interfaces Réseau, Séparation Stricte & Durcissement Kernel
-![Interfaces réseau et isolation furtive](docs/screenshots/03-interfaces-isolation.png)
-*Découverte dynamique des interfaces système réelles (`lo`, `eth1` en `CAPTURE_PASSIVE` promiscuous, `eth2` en `ADMINISTRATION`), vérification sans complaisance de l'absence d'adresse IP sur le port d'écoute passive et génération des commandes `sysctl` / `iproute2` d'invisibilité défensive pour Debian 13 (`arp_ignore=8`, `arp_announce=2`, `disable_ipv6=1`, `promisc on arp off`).*
+## ⚙️ 2. Périmètre et Nouveautés de la Version V0.2
 
-### 3.4 Contrôle d'Accès RBAC & Annuaire Utilisateurs
-![Contrôle d'accès RBAC et annuaire](docs/screenshots/04-rbac-access.png)
-*Gestion des comptes persistés dans PostgreSQL avec hachage Argon2id, création d'utilisateurs avec génération de mot de passe temporaire et matrice officielle des 8 permissions (`system:view`, `system:manage`, `interfaces:view`, `interfaces:manage`, `users:view`, `users:manage`, `audit:view`, `storage:manage`) réparties entre `Administrator`, `Analyst` et `Observer`.*
+| Icône | Composant | État V0.2 | Description technique vérifiée |
+| :---: |---|---|---|
+| ⚡ | **Backend REST** | **Implémenté & Testé** | FastAPI, Pydantic V2, SQLAlchemy 2.0, pool PostgreSQL durci + routes `/api/v1/system/updates*` |
+| 🔐 | **Authentification** | **Implémenté & Testé** | Argon2id natif obligatoire en production, rejet absolu des secrets par défaut |
+| 🪪 | **Sessions & Révocation JWT** | **Implémenté & Testé** | Claims stricts (`sub`, `iss`, `aud`, `exp`, `iat`, `jti`), révocation persistante multi-workers (`revoked_tokens`) |
+| 👥 | **Contrôle d'accès (RBAC)** | **Implémenté & Testé** | 3 rôles (`Administrator`, `Analyst`, `Observer`) et 8 permissions vérifiés côté serveur et filtrés dans le menu |
+| 📝 | **Bootstrap Admin & Audit** | **Implémenté & Testé** | CLI `openndr-admin create-first-admin`, journal `audit_logs` append-only (UTC, IP, JSONB) |
+| 🦀 | **Moteur Réseau Rust (`openndr-engine`)** | **Implémenté & Testé** | Binaire natif `0.2.0`, socket IPC `/run/openndr/engine.sock`, CLI `--check-config` / `--ingest` |
+| 📡 | **Capture Passive `AF_PACKET`** | **Implémenté & Testé** | Ring buffer zéro-copie `PACKET_MMAP` (`TPACKET_V2`), mode promiscuous sans IP sur l'interface SPAN |
+| 📦 | **Ingestion & Écriture PCAP** | **Implémenté & Testé** | Lecteur `.pcap` / `.pcapng` (`upload-pcap` & `ingest-pcap`) et écriture rotative locale (`/var/lib/openndr/captures/`) |
+| 🔬 | **Décodeur Hiérarchique L2–L4** | **Implémenté & Testé** | Ethernet II, VLAN 802.1Q, ARP, IPv4, IPv6, ICMP (v4/v6), TCP (flags & options), UDP |
+| 🗂️ | **Navigation Unifiée (Sidebar)** | **Implémenté & Vérifié** | Barre latérale unique persistante et rétractable (4 groupes : *Principal*, *Surveillance*, *Sécurité*, *Administration*) + tiroir mobile |
+| 🔄 | **Paramètres & Auto-Updater** | **Implémenté & Vérifié** | 5 catégories (*Système*, *Mises à jour*, *Affichage*, *Préférences utilisateur*, *Informations légales*) et planificateur automatique |
+| ☀️ | **Thème Clair & Sombre Sobres** | **Implémenté & Vérifié** | Palette classique d'administration système (clair `#f3f4f6` / `#ffffff`, sombre `#111318` / `#181b20`) sans flash au chargement |
+| 📱 | **Logo & Bouton Installer l'app (PWA)** | **Implémenté & Vérifié** | Logo officiel SVG/PNG, manifeste Web App, Service Worker `autoUpdate` et bouton d'installation dans les préférences |
+| 🔍 | **Suivi de flux & DPI L7** | *Prévu en V0.3* | Reconstruction bidirectionnelle TCP/UDP, analyseurs DNS / HTTP / TLS (SNI, JA3/JA4) / SSH |
+| 🚨 | **Détection & Corrélation** | *Prévu en V0.4 / V0.5* | Règles par signatures, heuristiques (scan, tunnel DNS) et dossiers d'incident |
 
-### 3.5 Journal d'Audit & Traçabilité Immuable
+---
+
+## 📸 3. Captures d'Écran de l'Application (Console Refondue)
+
+Toutes les captures ci-dessous ont été réalisées en conditions réelles (`1440×900` bureau et `390×844` mobile) sur la console unifiée **OpenNDR** avec états réels du serveur, sans aucune donnée fictive.
+
+### 3.1 Onboarding Légal & Clause de Non-Responsabilité
+![Onboarding Légal OpenNDR](docs/screenshots/08-legal-onboarding.png)
+*Fenêtre d'accueil au premier lancement présentant les **mentions légales explicites** indiquant que l'auteur n'est pas responsable des données fournies, importées ou analysées dans l'application.*
+
+### 3.2 Vue d'Ensemble — Thème Sombre
+![Vue d'ensemble OpenNDR Thème Sombre](docs/screenshots/01-dashboard.png)
+*Console principale avec barre latérale unique (*Principal*, *Surveillance*, *Sécurité*, *Administration*), barre supérieure épurée (fil d'Ariane, état réel de connexion au serveur, sélecteur de thème, menu utilisateur) et états vérifiés des composants système.*
+
+### 3.3 Vue d'Ensemble — Thème Clair
+![Vue d'ensemble OpenNDR Thème Clair](docs/screenshots/10-light-theme-dashboard.png)
+*Thème **Clair** sobre conçu pour une utilisation prolongée sur poste de travail.*
+
+### 3.4 Navigation Mobile Responsive
+![Menu latéral mobile OpenNDR](docs/screenshots/09-mobile-navigation.png)
+*Sur tablette et mobile (`390×844`), la barre latérale se transforme automatiquement en tiroir accessible se refermant à la sélection ou avec `Échap`.*
+
+### 3.5 Paramètres Système, Mises à Jour & Préférences
+![Paramètres système et mises à jour OpenNDR](docs/screenshots/11-system-settings-updates.png)
+*Écran **Paramètres système** organisé en 5 catégories (*Système*, *Mises à jour*, *Affichage*, *Préférences utilisateur*, *Informations légales*), sans valeurs de repli codées en dur.*
+
+### 3.6 Capture Réseau & Analyse PCAP
+![Capture réseau OpenNDR](docs/screenshots/02-capture-decoding.png)
+*Pilotage du moteur de capture, import `.pcap`/`.pcapng`, état explicite « Aucune donnée de capture disponible » en l'absence de trafic traité et confirmation avant arrêt de capture.*
+
+### 3.7 Interfaces Réseau & Vérification d'Isolation
+![Interfaces réseau et isolation](docs/screenshots/03-interfaces-isolation.png)
+*Découverte dynamique des interfaces réelles de l'hôte, séparation entre interface d'administration et port de capture passive, et signalement exact d'une non-conformité si une adresse IP est présente.*
+
+### 3.8 Utilisateurs, Rôles & Matrice RBAC
+![Utilisateurs et rôles RBAC](docs/screenshots/04-rbac-access.png)
+*Annuaire réel des comptes, création avec mot de passe temporaire affiché une seule fois, confirmation avant révocation et matrice de référence des 8 permissions.*
+
+### 3.9 Journal d'Audit & Inspecteur JSON
 ![Journal d'audit PostgreSQL](docs/screenshots/05-audit-log.png)
-*Journal d'audit de sécurité append-only (`audit_logs`) avec recherche et filtres par statut (`ALL`, `SUCCESS`, `DENIED`, `FAILURE`), horodatage UTC précis, adresse IP d'origine et inspecteur de charge utile structurée JSONB (ex. `PCAP_UPLOAD_INGEST`, `AUTH_LOGIN_SUCCESS`, `FIRST_ADMIN_INITIALIZED`).*
+*Tableau chronologique (*Date*, *Utilisateur*, *Action*, *Résultat*, *Adresse IP*, *Détails*) et inspecteur détaillé.*
 
-### 3.6 Banc de Recette & Sondes HTTP Réelles
-![Banc de recette et sondes HTTP](docs/screenshots/06-validation-probes.png)
-*Suite de 8 sondes automatisées exécutées directement contre l'API REST : disponibilité (`/api/v1/health/live`), connectivité PostgreSQL (`/api/v1/health/ready`), rapport global `v0.2.0`, rejet HTTP `401` sans jeton, rejet d'identifiants invalides avec écriture en audit, vérification réelle de l'isolation de l'interface passive (`FAIL` honnête lorsque l'IP de conteneur est présente sur `eth1`), télémétrie moteur Rust et politique de stockage PCAP local.*
+### 3.10 État et Diagnostics
+![État et diagnostics techniques](docs/screenshots/06-validation-probes.png)
+*Exécution à la demande de vérifications HTTP distinguant clairement joignabilité API, connectivité base de données, présence réelle du binaire Rust et conformité réseau.*
 
-### 3.7 Architecture Embarquée & Feuille de Route Produit
-![Feuille de route et documentation embarquée](docs/screenshots/07-architecture-deployment.png)
-*Centre de documentation technique intégré à la console Web regroupant la feuille de route officielle (`V0.1` et `V0.2` marquées terminées, `V0.3` DPI/flux comme prochaine étape, `V0.4`–`V1.0` planifiées), les décisions d'architecture (ADR), le guide d'installation Debian 13 et la spécification API.*
+### 3.11 Documentation Embarquée
+![Documentation embarquée OpenNDR](docs/screenshots/07-architecture-deployment.png)
+*Référentiels d'architecture, ADR, procédure Debian 13, contrats `/api/v1` et feuille de route produit indicative.*
 
 ---
 
-## 4. Architecture Technique
+## 🏗️ 4. Architecture Technique
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        RÉSEAU SOC / SUPERVISION                        │
+│              NAVIGATEUR SOC / APPLICATION PWA INSTALLÉE                │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ HTTPS (Port 443 / Reverse Proxy)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  Serveur Web Nginx / Express & Frontend SPA React                      │
-│  - Tableau de bord de supervision système & alertes d'isolation        │
-│  - Capture & Décodage V0.2 (Télémétrie, Import PCAP, Inspecteur L2–L4) │
-│  - Gestion RBAC, Journal d'audit JSONB & Sondes de validation          │
+│  Serveur Web Nginx / Express & Frontend SPA React + PWA Workbox        │
+│  - Navigation unifiée par Sidebar persistante + tiroir mobile          │
+│  - TopBar épurée (fil d'Ariane, connexion API, thème, session)         │
+│  - Thèmes Clair / Sombre sobres, composants UI uniformisés             │
+│  - Capture V0.2, Interfaces, RBAC, Audit JSONB & Diagnostics réels     │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ /api/v1/ (HTTP REST)
                                     ▼
@@ -107,7 +142,7 @@ Toutes les captures ci-dessous ont été réalisées directement sur l'applicati
 
 ---
 
-## 5. Arborescence du Projet
+## 📂 5. Arborescence du Projet
 
 ```text
 OpenNDROR/
@@ -120,7 +155,7 @@ OpenNDROR/
 │   │   ├── services/               # AuthService, UserService, AuditService, SystemService
 │   │   └── cli.py                  # CLI d'administration (openndr-admin)
 │   ├── migrations/                 # Migrations versionnées Alembic
-│   ├── tests/                      # Suite de tests pytest (21 tests dont ingestion PCAP V0.2)
+│   ├── tests/                      # Suite de tests pytest
 │   └── pyproject.toml              # Dépendances Python et entrypoint CLI
 ├── engine/                         # Workspace Rust V0.2 (openndr-engine)
 │   ├── crates/
@@ -132,40 +167,43 @@ OpenNDROR/
 │   ├── debian/                     # install.sh, uninstall.sh, check-prerequisites.sh, nginx
 │   ├── systemd/                    # openndr-backend.service, openndr-engine.service, openndr-web.service
 │   └── configuration/              # backend.env.example, openndr.conf.example
-├── docs/                           # Documentation d'ingénierie et captures réelles
-│   ├── screenshots/                # 7 captures d'écran actualisées de la console V0.2
-│   ├── ARCHITECTURE.md             # Décisions d'architecture détaillées
-│   ├── INSTALLATION_DEBIAN_13.md   # Guide complet d'installation pas-à-pas
-│   ├── CONFIGURATION.md            # Guide des variables d'environnement
-│   ├── SECURITY.md                 # Modèle de sécurité et divulgation
-│   ├── API.md                      # Spécification des routes REST V1
-│   ├── DATABASE.md                 # Dictionnaire des tables et schéma Alembic
-│   ├── DEVELOPMENT.md              # Guide de contribution locale
-│   ├── TESTING.md                  # Procédures de test et d'assurance qualité
-│   ├── ROADMAP.md                  # Feuille de route technique V0.1 -> V1.0
-│   └── TROUBLESHOOTING.md          # Résolution des anomalies opérationnelles
-├── src/                            # Interface Web React 19 / TypeScript / Tailwind CSS
-│   ├── components/                 # DashboardView, CaptureView, InterfacesView, RbacView,
-│   │                               # AuditView, ValidationView, DocsView, LoginModal, Header
-│   ├── App.tsx                     # Contrôleur principal de la console SOC
-│   └── types.ts                    # Contrats TypeScript alignés sur l'API REST V1
-├── server.ts                       # Serveur Express / Vite intégré (port 3000) & pont moteur Rust
-├── index.html                      # Point d'entrée SPA
-├── package.json                    # Dépendances Node.js / React et scripts tsx/vite
-├── vite.config.ts                  # Configuration Vite
+├── docs/                           # Documentation d'ingénierie et 11 captures réelles
+│   ├── screenshots/                # Captures 01 à 11 actualisées (Clair/Sombre/Mobile/Diagnostics)
+│   └── *.md                        # ARCHITECTURE, INSTALLATION_DEBIAN_13, SECURITY, API, ROADMAP...
+├── public/                         # Logo officiel & icônes PWA (icon.svg, pwa-*.png, apple-touch-icon.png)
+├── scripts/                        # verify-frontend.mjs (anti-mock) & verify-ui.mts (rendu & RBAC)
+├── src/                            # Interface Web React 19 / TypeScript / Tailwind CSS v4
+│   ├── config/navigation.ts        # Définition centralisée des sections et permissions RBAC
+│   ├── components/
+│   │   ├── ui/                     # PageHeader, SectionCard, StatusBadge, StateBlocks, DataTable, ConfirmDialog
+│   │   ├── Sidebar.tsx & TopBar.tsx# Navigation latérale unique + barre supérieure épurée
+│   │   ├── DashboardView.tsx       # Vue d'ensemble et guide de première utilisation réel
+│   │   ├── CaptureView.tsx         # Capture passive, import PCAP et exploration paquets
+│   │   ├── InterfacesView.tsx      # Interfaces d'administration / passive et durcissement sysctl
+│   │   ├── RbacView.tsx            # Utilisateurs, rôles et matrice des permissions
+│   │   ├── AuditView.tsx           # Journal d'audit et inspecteur JSON
+│   │   ├── ValidationView.tsx      # État et diagnostics techniques
+│   │   ├── SystemSettingsView.tsx  # Paramètres système en 5 catégories
+│   │   └── DocsView.tsx            # Documentation et feuille de route indicative
+│   ├── hooks/                      # useTheme.ts, usePWAInstall.ts
+│   ├── services/                   # api.ts (client REST typé)
+│   ├── types/                      # system.ts (contrats API & états)
+│   └── App.tsx                     # Contrôleur principal, gestion connexion backend & RBAC
+├── CONTEXT.md                      # Document de contexte produit & architecture
+├── CHANGELOG.md                    # Historique des versions (V0.1.0 & V0.2.0)
+├── server.ts                       # Serveur Express / Vite (port 3000), auto-updater & pont Rust
+├── vite.config.ts                  # Configuration Vite + VitePWA (autoUpdate)
 └── .github/workflows/ci.yml        # Pipeline CI GitHub Actions (Rust, Python, Frontend)
 ```
 
 ---
 
-## 6. Guide de Déploiement Rapide (Debian 13) & Tests
+## 🚀 6. Guide de Déploiement Rapide (Debian 13) & Tests
 
 ### 6.1 Prérequis
 - Debian 13 (Trixie) `x86_64`
-- 2 cœurs CPU minimum (4+ recommandés)
-- 4 Go de mémoire RAM minimum (8+ Go recommandés)
-- 2 interfaces réseau physiques (ex. `eth0` pour administration IP, `eth1` pour écoute passive sans IP)
-- Paquets système de compilation et capture : `build-essential`, `libpcap-dev`, `rustc`/`cargo`, `postgresql`, `nginx` (installés automatiquement par `install.sh`)
+- 2 cœurs CPU minimum (4+ recommandés), 4 Go RAM minimum (8+ Go recommandés)
+- 2 interfaces réseau physiques (administration IP + capture passive sans IP)
 
 ### 6.2 Installation Automatique sur Debian 13
 ```bash
@@ -176,35 +214,25 @@ sudo bash deployment/debian/install.sh
 
 ### 6.3 Initialisation Obligatoire du Premier Administrateur
 ```bash
-# La plateforme refuse tout démarrage avec des comptes par défaut
 openndr-admin create-first-admin --email admin@votre-domaine.local --full-name "Admin SOC"
 ```
 
-### 6.4 Démarrage des Services & Vérification
+### 6.4 Démarrage des Services & Exécution des Tests
 ```bash
-sudo systemctl start openndr-backend
-sudo systemctl start openndr-engine
-
-curl -s http://127.0.0.1:8000/api/v1/health | jq .
-curl -s http://127.0.0.1:8000/api/v1/health/ready | jq .
-```
-
-### 6.5 Exécution Locale & Suite de Tests Automatisés
-```bash
-# 1. Tests unitaires du moteur Rust (AF_PACKET, lecteur PCAP, décodeur L2–L4)
+# Tests unitaires moteur Rust V0.2
 cargo test --manifest-path engine/Cargo.toml
 cargo build --release --manifest-path engine/Cargo.toml
 
-# 2. Tests d'intégration et sécurité du backend FastAPI
+# Tests backend FastAPI
 PYTHONPATH=backend pytest backend/tests -v
 
-# 3. Console Web & serveur de développement (port 3000)
-npm install && npm run dev
+# Console Web & serveur de développement (port 3000) + vérification statique
+npm install && npm test && npm run dev
 ```
 
 ---
 
-## 7. Prochaines Étapes : Préparation V0.3
+## 🗺️ 7. Prochaines Étapes : Préparation V0.3
 
 La version **V0.3** permettra de passer de l'analyse par paquet à la compréhension des sessions applicatives :
 1. Suivi d'état bidirectionnel des flux TCP et UDP (table de flux à mémoire bornée anti-DoS).

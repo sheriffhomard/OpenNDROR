@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, X, AlertCircle, Loader2 } from 'lucide-react';
 import { AppLogo } from './AppLogo';
-import { HelpTooltip } from './HelpTooltip';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -34,7 +33,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       if (err instanceof Error) {
         setErrorMsg(err.message);
       } else {
-        setErrorMsg('Authentication failed.');
+        setErrorMsg('Échec de l\'authentification.');
       }
     } finally {
       setLoading(false);
@@ -42,77 +41,85 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="login-modal-title"
+    >
+      <div className="bg-white dark:bg-[#181b20] border border-gray-200 dark:border-[#2c313a] rounded-lg max-w-md w-full p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-[#2c313a]">
           <div className="flex items-center gap-2.5">
             <AppLogo className="w-7 h-7" />
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              OpenNDR SOC Console Sign In
+            <h3 id="login-modal-title" className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Connexion à la console OpenNDR
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            aria-label="Close sign in dialog"
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            aria-label="Fermer la fenêtre de connexion"
+            className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 rounded"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {errorMsg && (
-          <div className="p-3 bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-lg flex items-center gap-2">
+          <div
+            role="alert"
+            className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-red-800 dark:text-red-300 text-xs rounded-md flex items-center gap-2"
+          >
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs pt-1">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 mb-1.5 font-medium">
-              <span>SOC Email Address</span>
-              <HelpTooltip
-                title="SOC Account Email"
-                description="Enter the email address provisioned by your OpenNDR administrator (for example admin@openndr.local)."
-                align="left"
-              />
+            <label
+              htmlFor="login-email-input"
+              className="block text-gray-700 dark:text-gray-300 mb-1.5 font-medium"
+            >
+              Adresse e-mail
             </label>
             <input
-              type="text"
+              id="login-email-input"
+              type="email"
               required
-              placeholder="e.g. admin@openndr.local"
+              autoComplete="username"
+              placeholder="utilisateur@domaine.local"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+              className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-gray-300 dark:border-[#2c313a] rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 font-mono text-xs"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 mb-1.5 font-medium">
-              <span>Password</span>
-              <HelpTooltip
-                title="Account Password"
-                description="Enter your private passphrase. Passwords are verified using Argon2id hashing and never stored in plaintext."
-                align="left"
-              />
+            <label
+              htmlFor="login-password-input"
+              className="block text-gray-700 dark:text-gray-300 mb-1.5 font-medium"
+            >
+              Mot de passe
             </label>
             <input
+              id="login-password-input"
               type="password"
               required
+              autoComplete="current-password"
               placeholder="••••••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+              className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-gray-300 dark:border-[#2c313a] rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 font-mono text-xs"
             />
           </div>
 
-          <div className="p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-lg text-slate-600 dark:text-slate-400 flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            <span>PostgreSQL authentication secured by native Argon2id hashing.</span>
+          <div className="p-2.5 bg-gray-50 dark:bg-[#111318] border border-gray-200 dark:border-[#2c313a] rounded-md text-gray-600 dark:text-gray-400 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+            <span>Authentification vérifiée côté serveur via Argon2id et jeton JWT.</span>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
@@ -120,17 +127,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
+              className="px-3.5 py-2 border border-gray-300 dark:border-[#2c313a] bg-white dark:bg-[#1f2329] hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-md transition-colors"
             >
-              Close
+              Annuler
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors disabled:opacity-50"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{loading ? 'Signing in...' : 'Sign In'}</span>
+              <span>{loading ? 'Connexion...' : 'Se connecter'}</span>
             </button>
           </div>
         </form>

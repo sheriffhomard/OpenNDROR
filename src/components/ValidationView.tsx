@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import {
-  CheckCircle2,
-  XCircle,
   Play,
   RotateCcw,
   Terminal,
@@ -9,91 +7,136 @@ import {
   Server,
   Layers,
   Database,
-  FileCode,
+  HardDrive,
 } from 'lucide-react';
 import { ValidationTestItem } from '../types/system';
 import { apiService } from '../services/api';
-import { HelpTooltip } from './HelpTooltip';
+import {
+  PageContainer,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  OperationalState,
+} from './ui';
 
-export const ValidationView: React.FC = () => {
-  const [tests, setTests] = useState<ValidationTestItem[]>([
-    {
-      id: 'probe-live',
-      category: 'ARCH',
-      name: 'Availability Check (Liveness Probe)',
-      description: 'Queries /api/v1/health/live to verify FastAPI backend responsiveness.',
-      status: 'pending',
-    },
-    {
-      id: 'probe-ready',
-      category: 'DATABASE',
-      name: 'Relational Connectivity (Readiness Probe)',
-      description: 'Queries /api/v1/health/ready to test the PostgreSQL pool and persistence.',
-      status: 'pending',
-    },
-    {
-      id: 'probe-health',
-      category: 'ARCH',
-      name: 'Global Platform Health Report',
-      description: 'Queries /api/v1/health to verify platform components and V0.2 version.',
-      status: 'pending',
-    },
-    {
-      id: 'probe-auth-guard',
-      category: 'SECURITY',
-      name: 'Unauthenticated Access Control (401 Rejection)',
-      description: 'Attempts to access /api/v1/users without a JWT token and verifies strict 401 rejection.',
-      status: 'pending',
-    },
-    {
-      id: 'probe-invalid-creds',
-      category: 'SECURITY',
-      name: 'Invalid Credentials Rejection & Logging',
-      description: 'Sends invalid credentials to /api/v1/auth/login and verifies the 401 refusal.',
-      status: 'pending',
-    },
-    {
-      id: 'probe-stealth-check',
-      category: 'NETWORK',
-      name: 'Passive Interface Stealth Compliance',
-      description: 'Verifies that the passive capture interface has no IP address assigned (zero emission).',
-      status: 'pending',
-    },
-    {
-      id: 'probe-engine-standby',
-      category: 'SYSTEMD',
-      name: 'Real Rust V0.2 Engine Telemetry',
-      description: 'Queries /api/v1/system/capture/telemetry and verifies the V0.2 engine without simulated traffic.',
-      status: 'pending',
-    },
-    {
-      id: 'probe-storage-quota',
-      category: 'SYSTEMD',
-      name: 'Local PCAP Storage Configuration',
-      description: 'Verifies local PCAP storage quotas and directories with zero cloud dependency.',
-      status: 'pending',
-    },
-  ]);
+interface ValidationViewProps {
+  isAuthenticated: boolean;
+}
 
+const INITIAL_TESTS: ValidationTestItem[] = [
+  {
+    id: 'probe-live',
+    category: 'ARCH',
+    name: 'Disponibilité API (Liveness)',
+    description: 'Interroge /api/v1/health/live pour vérifier que le serveur répond via HTTP.',
+    status: 'pending',
+  },
+  {
+    id: 'probe-health',
+    category: 'ARCH',
+    name: 'Rapport de santé plateforme',
+    description: 'Interroge /api/v1/health pour lire l\'état global, la version et la cible OS.',
+    status: 'pending',
+  },
+  {
+    id: 'probe-ready',
+    category: 'DATABASE',
+    name: 'Connectivité base de données (Readiness)',
+    description: 'Interroge /api/v1/health/ready pour confirmer l\'état de la connexion relationnelle.',
+    status: 'pending',
+  },
+  {
+    id: 'probe-auth-guard',
+    category: 'SECURITY',
+    name: 'Barrière d\'accès anonyme (HTTP 401)',
+    description: 'Vérifie que GET /api/v1/users sans jeton JWT renvoie strictement un HTTP 401.',
+    status: 'pending',
+  },
+  {
+    id: 'probe-invalid-creds',
+    category: 'SECURITY',
+    name: 'Rejet d\'identifiants invalides',
+    description: 'Vérifie le refus HTTP 401 lors d\'une tentative d\'authentification erronée.',
+    status: 'pending',
+  },
+  {
+    id: 'probe-engine-telemetry',
+    category: 'SYSTEMD',
+    name: 'Moteur de capture Rust et télémétrie',
+    description: 'Vérifie /api/v1/system/capture/telemetry et l\'intégrité du binaire via /api/v1/system/updates.',
+    status: 'pending',
+  },
+  {
+    id: 'probe-stealth-check',
+    category: 'NETWORK',
+    name: 'Isolation de l\'interface passive',
+    description: 'Interroge /api/v1/system/interfaces/isolation-check pour confirmer l\'absence d\'adresse IP.',
+    status: 'pending',
+  },
+  {
+    id: 'probe-storage-quota',
+    category: 'SYSTEMD',
+    name: 'Répertoire et quota de stockage PCAP',
+    description: 'Interroge /api/v1/system/storage pour vérifier la présence du dossier et l\'espace local.',
+    status: 'pending',
+  },
+];
+
+const CATEGORY_LABELS: Record<ValidationTestItem['category'], string> = {
+  ARCH: 'Backend API',
+  DATABASE: 'Base de données',
+  SECURITY: 'Sécurité',
+  NETWORK: 'Interfaces réseau',
+  SYSTEMD: 'Moteur & Stockage',
+};
+
+const CATEGORY_ICONS: Record<ValidationTestItem['category'], React.ComponentType<{ className?: string }>> = {
+  ARCH: Layers,
+  SECURITY: ShieldCheck,
+  NETWORK: Server,
+  DATABASE: Database,
+  SYSTEMD: HardDrive,
+};
+
+function mapTestStatusToBadge(status: ValidationTestItem['status']): {
+  state: OperationalState;
+  label: string;
+} {
+  switch (status) {
+    case 'passed':
+      return { state: 'operational', label: 'Conforme' };
+    case 'warning':
+      return { state: 'degraded', label: 'Vérification requise' };
+    case 'failed':
+      return { state: 'unavailable', label: 'Échec' };
+    case 'running':
+      return { state: 'unknown', label: 'En cours...' };
+    default:
+      return { state: 'unknown', label: 'Non exécuté' };
+  }
+}
+
+export const ValidationView: React.FC<ValidationViewProps> = ({ isAuthenticated }) => {
+  const [tests, setTests] = useState<ValidationTestItem[]>(INITIAL_TESTS);
   const [isRunning, setIsRunning] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState<string[]>([
-    'OpenNDR V0.2 technical validation suite ready.',
-    'Each test executes a live HTTP probe against the backend server.',
+    'Console de diagnostics prête. Aucun test n\'a encore été exécuté dans cette session.',
   ]);
 
   const updateTest = (id: string, partial: Partial<ValidationTestItem>) => {
-    setTests((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...partial } : t))
-    );
+    setTests((prev) => prev.map((t) => (t.id === id ? { ...t, ...partial } : t)));
+  };
+
+  const appendLog = (line: string) => {
+    setConsoleLogs((prev) => [...prev, line]);
   };
 
   const handleRunAll = async () => {
     setIsRunning(true);
-    setConsoleLogs((prev) => [
-      ...prev,
-      `--- Starting test campaign at ${new Date().toLocaleTimeString('en-US')} ---`,
-    ]);
+    setTests(INITIAL_TESTS.map((t) => ({ ...t, status: 'pending', details: undefined, durationMs: undefined })));
+    appendLog(`--- Début des vérifications à ${new Date().toLocaleTimeString('fr-FR')} ---`);
 
+    // 1. Liveness
     updateTest('probe-live', { status: 'running' });
     const t0 = performance.now();
     try {
@@ -103,62 +146,63 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-live', {
           status: 'passed',
           durationMs: dur,
-          details: `FastAPI backend active and responsive (status: ${res.status})`,
+          details: `Serveur API joignable via HTTP (status: ${res.status})`,
         });
-        setConsoleLogs((prev) => [...prev, `[✓ PASS] Liveness Probe (${dur}ms): status=UP`]);
+        appendLog(`[OK] Liveness (${dur} ms) : status=${res.status}`);
       } else {
-        throw new Error(`Unexpected status: ${JSON.stringify(res)}`);
+        throw new Error(`Réponse inattendue : ${JSON.stringify(res)}`);
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t0);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-live', { status: 'failed', durationMs: dur, details: `Failed: ${msg}` });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Liveness Probe: ${msg}`]);
+      updateTest('probe-live', { status: 'failed', durationMs: dur, details: msg });
+      appendLog(`[ÉCHEC] Liveness (${dur} ms) : ${msg}`);
     }
 
-    updateTest('probe-ready', { status: 'running' });
+    // 2. Platform Health
+    updateTest('probe-health', { status: 'running' });
     const t1 = performance.now();
     try {
-      const res = await apiService.getReadiness();
+      const res = await apiService.getHealth();
       const dur = Math.round(performance.now() - t1);
+      const isHealthy = res.status === 'HEALTHY';
+      updateTest('probe-health', {
+        status: isHealthy ? 'passed' : 'warning',
+        durationMs: dur,
+        details: `Statut ${res.status} · Version ${res.version} · Cible : ${res.target_platform}`,
+      });
+      appendLog(`[${isHealthy ? 'OK' : 'AVERT.'}] Health (${dur} ms) : ${res.status} v${res.version}`);
+    } catch (err: unknown) {
+      const dur = Math.round(performance.now() - t1);
+      const msg = err instanceof Error ? err.message : String(err);
+      updateTest('probe-health', { status: 'failed', durationMs: dur, details: msg });
+      appendLog(`[ÉCHEC] Health (${dur} ms) : ${msg}`);
+    }
+
+    // 3. Database readiness
+    updateTest('probe-ready', { status: 'running' });
+    const t2 = performance.now();
+    try {
+      const res = await apiService.getReadiness();
+      const dur = Math.round(performance.now() - t2);
       if (res && res.database_connected) {
         updateTest('probe-ready', {
           status: 'passed',
           durationMs: dur,
-          details: `PostgreSQL connection confirmed (status: ${res.status})`,
+          details: `Base de données connectée (${res.status})`,
         });
-        setConsoleLogs((prev) => [...prev, `[✓ PASS] Readiness Probe (${dur}ms): DB connected`]);
+        appendLog(`[OK] Readiness DB (${dur} ms) : connexion confirmée`);
       } else {
-        throw new Error(res?.details || 'Database not ready');
+        throw new Error(res?.details || 'Base de données non prête');
       }
     } catch (err: unknown) {
-      const dur = Math.round(performance.now() - t1);
-      const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-ready', { status: 'failed', durationMs: dur, details: `Failed: ${msg}` });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Readiness Probe: ${msg}`]);
-    }
-
-    updateTest('probe-health', { status: 'running' });
-    const t2 = performance.now();
-    try {
-      const res = await apiService.getHealth();
-      const dur = Math.round(performance.now() - t2);
-      updateTest('probe-health', {
-        status: 'passed',
-        durationMs: dur,
-        details: `Version ${res.version} · Target platform: ${res.target_platform}`,
-      });
-      setConsoleLogs((prev) => [
-        ...prev,
-        `[✓ PASS] Global Report (${dur}ms): v${res.version} on ${res.target_platform}`,
-      ]);
-    } catch (err: unknown) {
       const dur = Math.round(performance.now() - t2);
       const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-health', { status: 'failed', durationMs: dur, details: `Failed: ${msg}` });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Global Report: ${msg}`]);
+      updateTest('probe-ready', { status: 'failed', durationMs: dur, details: msg });
+      appendLog(`[ÉCHEC] Readiness DB (${dur} ms) : ${msg}`);
     }
 
+    // 4. Auth 401 guard
     updateTest('probe-auth-guard', { status: 'running' });
     const t3 = performance.now();
     try {
@@ -168,19 +212,20 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-auth-guard', {
           status: 'passed',
           durationMs: dur,
-          details: `Compliant HTTP 401 rejection without an authentication token.`,
+          details: 'Accès anonyme strictement rejeté par HTTP 401.',
         });
-        setConsoleLogs((prev) => [...prev, `[✓ PASS] Security 401 (${dur}ms): Anonymous access strictly blocked.`]);
+        appendLog(`[OK] Barrière 401 (${dur} ms) : accès anonyme bloqué`);
       } else {
-        throw new Error(`Unexpected HTTP status: ${rawRes.status} (expected 401)`);
+        throw new Error(`Statut HTTP inattendu : ${rawRes.status} (attendu : 401)`);
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t3);
       const msg = err instanceof Error ? err.message : String(err);
       updateTest('probe-auth-guard', { status: 'failed', durationMs: dur, details: msg });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Security 401: ${msg}`]);
+      appendLog(`[ÉCHEC] Barrière 401 (${dur} ms) : ${msg}`);
     }
 
+    // 5. Invalid credentials rejection
     updateTest('probe-invalid-creds', { status: 'running' });
     const t4 = performance.now();
     try {
@@ -197,261 +242,255 @@ export const ValidationView: React.FC = () => {
         updateTest('probe-invalid-creds', {
           status: 'passed',
           durationMs: dur,
-          details: `Compliant HTTP 401 rejection with failure recorded in the audit log.`,
+          details: 'Authentification erronée rejetée (HTTP 401).',
         });
-        setConsoleLogs((prev) => [...prev, `[✓ PASS] Invalid credentials rejected (${dur}ms): HTTP 401 verified.`]);
+        appendLog(`[OK] Rejet identifiants (${dur} ms) : HTTP 401 confirmé`);
       } else {
-        throw new Error(`Unexpected status code: HTTP ${loginRes.status}`);
+        throw new Error(`Statut HTTP inattendu : ${loginRes.status}`);
       }
     } catch (err: unknown) {
       const dur = Math.round(performance.now() - t4);
       const msg = err instanceof Error ? err.message : String(err);
       updateTest('probe-invalid-creds', { status: 'failed', durationMs: dur, details: msg });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Invalid credentials: ${msg}`]);
+      appendLog(`[ÉCHEC] Rejet identifiants (${dur} ms) : ${msg}`);
     }
 
-    updateTest('probe-stealth-check', { status: 'running' });
+    // 6. Rust engine telemetry + binary integrity check
+    updateTest('probe-engine-telemetry', { status: 'running' });
     const t5 = performance.now();
-    try {
-      const isolationRes = await apiService.getIsolationCheck();
-      const dur = Math.round(performance.now() - t5);
-      if (isolationRes.is_isolated) {
-        updateTest('probe-stealth-check', {
-          status: 'passed',
+    if (!isAuthenticated) {
+      try {
+        const upd = await apiService.getUpdateStatus();
+        const dur = Math.round(performance.now() - t5);
+        updateTest('probe-engine-telemetry', {
+          status: 'warning',
           durationMs: dur,
-          details: `Interface ${isolationRes.interface} compliant (${isolationRes.status}): ${isolationRes.details}`,
+          details: upd.engine_integrity_ok
+            ? 'Binaire détecté, mais authentification requise pour lire la télémétrie.'
+            : 'Binaire Rust non compilé dans cet environnement (authentification requise pour la télémétrie).',
         });
-        setConsoleLogs((prev) => [
-          ...prev,
-          `[✓ PASS] Real Network Isolation (${dur}ms): ${isolationRes.details}`,
-        ]);
-      } else {
-        updateTest('probe-stealth-check', {
-          status: 'failed',
-          durationMs: dur,
-          details: `Status ${isolationRes.status}: ${isolationRes.details}`,
-        });
-        setConsoleLogs((prev) => [
-          ...prev,
-          `[✗ FAIL] Real Network Isolation (${dur}ms): Status ${isolationRes.status} - ${isolationRes.details}`,
-        ]);
+        appendLog(`[AVERT.] Moteur Rust (${dur} ms) : connexion utilisateur requise pour télémétrie`);
+      } catch (err: unknown) {
+        const dur = Math.round(performance.now() - t5);
+        const msg = err instanceof Error ? err.message : String(err);
+        updateTest('probe-engine-telemetry', { status: 'failed', durationMs: dur, details: msg });
+        appendLog(`[ÉCHEC] Moteur Rust (${dur} ms) : ${msg}`);
       }
-    } catch (err: unknown) {
-      const dur = Math.round(performance.now() - t5);
-      const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-stealth-check', { status: 'failed', durationMs: dur, details: msg });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Stealth Isolation: ${msg}`]);
+    } else {
+      try {
+        const [telem, upd] = await Promise.all([
+          apiService.getCaptureTelemetry(),
+          apiService.getUpdateStatus().catch(() => null),
+        ]);
+        const dur = Math.round(performance.now() - t5);
+        if (upd && !upd.engine_integrity_ok) {
+          updateTest('probe-engine-telemetry', {
+            status: 'warning',
+            durationMs: dur,
+            details: `API télémétrie joignable (v${telem.engine_version}), mais binaire natif absent sur cet hôte.`,
+          });
+          appendLog(`[AVERT.] Moteur Rust (${dur} ms) : binaire natif non compilé localement`);
+        } else {
+          updateTest('probe-engine-telemetry', {
+            status: 'passed',
+            durationMs: dur,
+            details: `Moteur v${telem.engine_version} (${telem.capture_mode}) · ${telem.packets_received} paquet(s) reçu(s).`,
+          });
+          appendLog(`[OK] Moteur Rust (${dur} ms) : mode=${telem.capture_mode}, paquets=${telem.packets_received}`);
+        }
+      } catch (err: unknown) {
+        const dur = Math.round(performance.now() - t5);
+        const msg = err instanceof Error ? err.message : String(err);
+        updateTest('probe-engine-telemetry', { status: 'failed', durationMs: dur, details: msg });
+        appendLog(`[ÉCHEC] Moteur Rust (${dur} ms) : ${msg}`);
+      }
     }
 
-    updateTest('probe-engine-standby', { status: 'running' });
+    // 7. Passive interface isolation
+    updateTest('probe-stealth-check', { status: 'running' });
     const t6 = performance.now();
-    try {
-      const telem = await apiService.getCaptureTelemetry();
-      const dur = Math.round(performance.now() - t6);
-      if (telem && telem.engine_version === '0.2.0' && telem.protocol_stats) {
-        updateTest('probe-engine-standby', {
-          status: 'passed',
-          durationMs: dur,
-          details: `Engine v${telem.engine_version} (${telem.capture_mode}) · ${telem.packets_received} packets processed.`,
-        });
-        setConsoleLogs((prev) => [
-          ...prev,
-          `[✓ PASS] Rust Engine V0.2 (${dur}ms): mode=${telem.capture_mode}, packets=${telem.packets_received}.`,
-        ]);
-      } else {
-        throw new Error('Incomplete V0.2 telemetry response');
+    if (!isAuthenticated) {
+      updateTest('probe-stealth-check', {
+        status: 'warning',
+        details: 'Authentification requise pour inspecter les interfaces réseau.',
+      });
+      appendLog('[AVERT.] Isolation passive : authentification requise');
+    } else {
+      try {
+        const isolationRes = await apiService.getIsolationCheck();
+        const dur = Math.round(performance.now() - t6);
+        if (isolationRes.is_isolated) {
+          updateTest('probe-stealth-check', {
+            status: 'passed',
+            durationMs: dur,
+            details: `Interface ${isolationRes.interface} conforme (${isolationRes.status})`,
+          });
+          appendLog(`[OK] Isolation passive (${dur} ms) : ${isolationRes.details}`);
+        } else {
+          updateTest('probe-stealth-check', {
+            status: isolationRes.status === 'NOT_CONFIGURED' ? 'warning' : 'failed',
+            durationMs: dur,
+            details: `${isolationRes.status} : ${isolationRes.details}`,
+          });
+          appendLog(`[AVERT.] Isolation passive (${dur} ms) : ${isolationRes.status} — ${isolationRes.details}`);
+        }
+      } catch (err: unknown) {
+        const dur = Math.round(performance.now() - t6);
+        const msg = err instanceof Error ? err.message : String(err);
+        updateTest('probe-stealth-check', { status: 'failed', durationMs: dur, details: msg });
+        appendLog(`[ÉCHEC] Isolation passive (${dur} ms) : ${msg}`);
       }
-    } catch (err: unknown) {
-      const dur = Math.round(performance.now() - t6);
-      const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-engine-standby', { status: 'failed', durationMs: dur, details: msg });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Rust Engine V0.2: ${msg}`]);
     }
 
+    // 8. PCAP storage readiness
     updateTest('probe-storage-quota', { status: 'running' });
     const t7 = performance.now();
-    try {
-      const storageRes = await apiService.getStorageMetrics();
-      const dur = Math.round(performance.now() - t7);
+    if (!isAuthenticated) {
       updateTest('probe-storage-quota', {
-        status: 'passed',
-        durationMs: dur,
-        details: `Retention ${storageRes.retentionDays}d · Max quota: ${storageRes.maxStorageGb} GB on local disk.`,
+        status: 'warning',
+        details: 'Authentification requise pour vérifier le répertoire de stockage PCAP.',
       });
-      setConsoleLogs((prev) => [
-        ...prev,
-        `[✓ PASS] Storage Quota (${dur}ms): ${storageRes.maxStorageGb} GB configured.`,
-      ]);
-    } catch (err: unknown) {
-      const dur = Math.round(performance.now() - t7);
-      const msg = err instanceof Error ? err.message : String(err);
-      updateTest('probe-storage-quota', { status: 'failed', durationMs: dur, details: msg });
-      setConsoleLogs((prev) => [...prev, `[✗ FAIL] Storage: ${msg}`]);
+      appendLog('[AVERT.] Stockage PCAP : authentification requise');
+    } else {
+      try {
+        const storageRes = await apiService.getStorageMetrics();
+        const dur = Math.round(performance.now() - t7);
+        const ready = storageRes.status === 'READY';
+        updateTest('probe-storage-quota', {
+          status: ready ? 'passed' : 'warning',
+          durationMs: dur,
+          details: `${storageRes.pcapDirectory} · Statut : ${storageRes.status || 'Inconnu'} · Quota ${storageRes.maxStorageGb} Go`,
+        });
+        appendLog(`[${ready ? 'OK' : 'AVERT.'}] Stockage PCAP (${dur} ms) : statut=${storageRes.status}`);
+      } catch (err: unknown) {
+        const dur = Math.round(performance.now() - t7);
+        const msg = err instanceof Error ? err.message : String(err);
+        updateTest('probe-storage-quota', { status: 'failed', durationMs: dur, details: msg });
+        appendLog(`[ÉCHEC] Stockage PCAP (${dur} ms) : ${msg}`);
+      }
     }
 
     setIsRunning(false);
-    setConsoleLogs((prev) => [
-      ...prev,
-      `--- V0.2 validation completed at ${new Date().toLocaleTimeString('en-US')} ---`,
-    ]);
+    appendLog(`--- Fin des vérifications à ${new Date().toLocaleTimeString('fr-FR')} ---`);
   };
 
   const passedCount = tests.filter((t) => t.status === 'passed').length;
+  const warningCount = tests.filter((t) => t.status === 'warning').length;
   const failedCount = tests.filter((t) => t.status === 'failed').length;
-
-  const categoryIcons = {
-    ARCH: Layers,
-    SECURITY: ShieldCheck,
-    NETWORK: Server,
-    DATABASE: Database,
-    SYSTEMD: FileCode,
-  };
+  const executedCount = tests.filter((t) => t.status !== 'pending').length;
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <span>V0.2 Automated Acceptance &amp; Validation Suite</span>
-              <HelpTooltip title="Live Validation Suite" description="Runs 8 real HTTP checks against the API to confirm security barriers, database connectivity, and engine telemetry." />
-            </h2>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Executes live HTTP probes against the backend to verify strict acceptance criteria
-              (authentication, PostgreSQL database, network isolation, RBAC, V0.2 capture engine).
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleRunAll}
-              disabled={isRunning}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap shrink-0"
-            >
-              {isRunning ? (
-                <>
-                  <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                  Running Probes...
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5" />
-                  Run Live Probes
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Scorebar */}
-        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-4">
-            <span className="text-slate-600 dark:text-slate-400 inline-flex items-center gap-1.5">
-              <span>
-                Result: <strong className="text-slate-900 dark:text-slate-200">{passedCount}</strong> / {tests.length} tests passed
-              </span>
-              <HelpTooltip title="Acceptance Score" description="Counts how many live HTTP probes succeeded during the latest run." />
-            </span>
-            {failedCount > 0 && (
-              <span className="text-rose-600 dark:text-rose-400 font-semibold">
-                {failedCount} failed
-              </span>
+    <PageContainer>
+      <PageHeader
+        title="État et diagnostics"
+        description="Vérification technique distincte de la joignabilité HTTP du serveur et de l'état fonctionnel réel des composants."
+        meta={
+          <span className="tabular-nums">
+            {executedCount === 0
+              ? 'Aucune vérification exécutée'
+              : `${passedCount} conforme(s) · ${warningCount} avertissement(s) · ${failedCount} échec(s) sur ${tests.length}`}
+          </span>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={handleRunAll}
+            disabled={isRunning}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+          >
+            {isRunning ? (
+              <>
+                <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                <span>Exécution en cours...</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5" />
+                <span>Lancer les diagnostics</span>
+              </>
             )}
-          </div>
-          <div className="w-48 bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-            <div
-              className={`h-full transition-all duration-300 ${
-                failedCount > 0 ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
-              style={{ width: `${(passedCount / tests.length) * 100}%` }}
-            />
-          </div>
-        </div>
-      </div>
+          </button>
+        }
+      />
 
-      {/* Tests Matrix */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {tests.map((test) => {
-          const Icon = categoryIcons[test.category];
-          return (
-            <div
-              key={test.id}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="flex items-center gap-2">
-                    <Icon className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-200">{test.name}</span>
-                  </div>
-                  <div>
-                    {test.status === 'passed' && (
-                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-mono">
-                        <CheckCircle2 className="w-4 h-4" />
-                        PASS
+      {/* Liste structurée des diagnostics */}
+      <SectionCard
+        title="Contrôles techniques par composant"
+        description="Les contrôles non encore exécutés restent explicitement marqués « Non exécuté »."
+        noPadding
+      >
+        <div className="divide-y divide-gray-200 dark:divide-[#2c313a]">
+          {tests.map((test) => {
+            const Icon = CATEGORY_ICONS[test.category];
+            const badge = mapTestStatusToBadge(test.status);
+
+            return (
+              <div
+                key={test.id}
+                className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <Icon className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" />
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {test.name}
                       </span>
-                    )}
-                    {test.status === 'failed' && (
-                      <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400 text-xs font-mono">
-                        <XCircle className="w-4 h-4" />
-                        FAIL
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                        · {CATEGORY_LABELS[test.category]}
                       </span>
-                    )}
-                    {test.status === 'running' && (
-                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-mono">
-                        <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                        TESTING...
-                      </span>
-                    )}
-                    {test.status === 'pending' && (
-                      <span className="text-slate-400 dark:text-slate-500 text-xs font-mono">PENDING</span>
+                    </div>
+                    <p className="text-gray-500 dark:text-gray-400">{test.description}</p>
+                    {test.details && (
+                      <p className="font-mono text-gray-700 dark:text-gray-300 pt-0.5">
+                        {test.details}
+                      </p>
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-slate-600 dark:text-slate-400">{test.description}</p>
-              </div>
 
-              {test.details && (
-                <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800/80 text-xs font-mono text-slate-700 dark:text-slate-300 flex justify-between items-center">
-                  <span className="truncate">{test.details}</span>
+                <div className="flex items-center gap-3 shrink-0 self-start sm:self-center">
                   {test.durationMs !== undefined && (
-                    <span className="text-slate-500 text-xs shrink-0 ml-2 tabular-nums">
-                      {test.durationMs}ms
+                    <span className="font-mono text-gray-500 dark:text-gray-400 tabular-nums">
+                      {test.durationMs} ms
                     </span>
                   )}
+                  <StatusBadge state={badge.state} label={badge.label} />
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Live Terminal Log */}
-      <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-900 dark:text-slate-300">
-          <Terminal className="w-4 h-4 text-emerald-500" />
-          <span>HTTP Probe Execution Log</span>
-          <HelpTooltip title="Probe Execution Output" description="Raw chronological output and response latency for each HTTP diagnostic check." />
+              </div>
+            );
+          })}
         </div>
-        <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-700 dark:text-slate-300 space-y-1 max-h-48 overflow-y-auto">
+      </SectionCard>
+
+      {/* Journal d'exécution */}
+      <SectionCard
+        title={
+          <>
+            <Terminal className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <span>Journal d&apos;exécution des sondes HTTP</span>
+          </>
+        }
+      >
+        <div className="p-3 bg-gray-50 dark:bg-[#111318] rounded-md border border-gray-200 dark:border-[#2c313a] font-mono text-xs text-gray-700 dark:text-gray-300 space-y-1 max-h-56 overflow-y-auto">
           {consoleLogs.map((log, idx) => (
             <div
               key={idx}
               className={
-                log.includes('[✓ PASS]')
+                log.startsWith('[OK]')
                   ? 'text-emerald-700 dark:text-emerald-400'
-                  : log.includes('[✗ FAIL]')
-                  ? 'text-rose-700 dark:text-rose-400'
-                  : 'text-slate-500 dark:text-slate-400'
+                  : log.startsWith('[ÉCHEC]')
+                  ? 'text-red-700 dark:text-red-400'
+                  : log.startsWith('[AVERT.]')
+                  ? 'text-amber-700 dark:text-amber-400'
+                  : 'text-gray-500 dark:text-gray-400'
               }
             >
               {log}
             </div>
           ))}
         </div>
-      </div>
-    </div>
+      </SectionCard>
+    </PageContainer>
   );
 };

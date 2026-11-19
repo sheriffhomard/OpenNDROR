@@ -16,7 +16,7 @@ import {
   SystemUpdateState,
 } from '../types/system';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api/v1';
 const TOKEN_KEY = 'openndr_jwt_token';
 const USER_KEY = 'openndr_auth_user';
 
@@ -438,7 +438,7 @@ class ApiService {
       Array<{
         id: number;
         name: string;
-        role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE';
+        role: 'ADMINISTRATION' | 'CAPTURE_PASSIVE' | 'LOOPBACK';
         ip_address: string | null;
         mac_address: string;
         is_promiscuous: boolean;
@@ -459,15 +459,14 @@ class ApiService {
       isUp: item.is_up,
       mtu: item.mtu,
       speedMbps: item.speed_mbps,
-      rxPackets: 0, // Compteurs paquets détaillés exposés par /system/capture/telemetry (V0.2)
-      txPackets: 0,
-      rxBytes: 0,
-      txBytes: 0,
       rxDropped: item.rx_dropped,
       isStealthCompliant: item.is_stealth_compliant,
-      complianceReason: item.is_stealth_compliant
-        ? 'Stealth interface compliant (Zero IP & Promiscuous)'
-        : 'NON-COMPLIANT: IP address detected on passive capture interface',
+      complianceReason:
+        item.role !== 'CAPTURE_PASSIVE'
+          ? 'Interface non dédiée à la capture passive'
+          : item.is_stealth_compliant
+          ? 'Conforme : aucune adresse IP assignée et mode promiscuous actif'
+          : 'Non conforme : une adresse IP est assignée sur l\'interface de capture passive',
     }));
   }
 
@@ -493,6 +492,7 @@ class ApiService {
         id: number;
         timestamp: string;
         user_email: string;
+        user_role?: string | null;
         ip_address: string;
         action: string;
         resource_type: string;
@@ -516,7 +516,7 @@ class ApiService {
         id: String(entry.id),
         timestamp: entry.timestamp,
         userEmail: entry.user_email,
-        userRole: 'Audited User',
+        userRole: entry.user_role || null,
         action: entry.action,
         resourceType: entry.resource_type,
         resourceId: entry.resource_id || '-',

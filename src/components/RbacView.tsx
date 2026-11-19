@@ -1,21 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Users,
-  Shield,
   UserPlus,
   Check,
+  Minus,
   X,
   Lock,
   AlertCircle,
   Copy,
   CheckCheck,
+  Shield,
 } from 'lucide-react';
 import { User, UserRole, PermissionCode } from '../types/auth';
 import { HelpTooltip } from './HelpTooltip';
+import {
+  PageContainer,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+  DataTable,
+  ConfirmDialog,
+} from './ui';
 
 interface RbacViewProps {
   users: User[];
+  isLoading?: boolean;
+  error?: string | null;
+  hasViewPermission: boolean;
   canManageUsers: boolean;
+  currentUserEmail?: string | null;
+  onRetry?: () => void;
   onToggleUserActive: (userId: string) => Promise<void>;
   onCreateUser: (data: {
     email: string;
@@ -25,9 +41,29 @@ interface RbacViewProps {
   }) => Promise<{ user: User; temporaryPassword?: string }>;
 }
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  Administrator: 'Administrateur',
+  Analyst: 'Analyste',
+  Observer: 'Observateur',
+};
+
+const ROLE_BADGE_CLASSES: Record<UserRole, string> = {
+  Administrator:
+    'bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800/60',
+  Analyst:
+    'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60',
+  Observer:
+    'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800/60',
+};
+
 export const RbacView: React.FC<RbacViewProps> = ({
   users,
+  isLoading = false,
+  error = null,
+  hasViewPermission,
   canManageUsers,
+  currentUserEmail = null,
+  onRetry,
   onToggleUserActive,
   onCreateUser,
 }) => {
@@ -37,11 +73,25 @@ export const RbacView: React.FC<RbacViewProps> = ({
   const [newRole, setNewRole] = useState<UserRole>('Analyst');
   const [customPassword, setCustomPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [createdCredentials, setCreatedCredentials] = useState<{
     email: string;
     tempPass: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [pendingToggleUser, setPendingToggleUser] = useState<User | null>(null);
+  const [isToggling, setIsToggling] = useState(false);
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) setIsModalOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isModalOpen, isSubmitting]);
 
   const permissionMatrix: {
     code: PermissionCode;
@@ -51,23 +101,82 @@ export const RbacView: React.FC<RbacViewProps> = ({
     analyst: boolean;
     observer: boolean;
   }[] = [
-    { code: 'system:view', label: 'View system status and metrics', module: 'System', admin: true, analyst: true, observer: true },
-    { code: 'system:manage', label: 'Manage services and restart daemons', module: 'System', admin: true, analyst: false, observer: false },
-    { code: 'interfaces:view', label: 'View network configuration', module: 'Network', admin: true, analyst: true, observer: true },
-    { code: 'interfaces:manage', label: 'Assign and configure capture interfaces', module: 'Network', admin: true, analyst: false, observer: false },
-    { code: 'users:view', label: 'View user accounts and roles directory', module: 'Users', admin: true, analyst: true, observer: false },
-    { code: 'users:manage', label: 'Create, edit, or revoke accounts', module: 'Users', admin: true, analyst: false, observer: false },
-    { code: 'audit:view', label: 'View the security audit log', module: 'Audit', admin: true, analyst: true, observer: false },
-    { code: 'storage:manage', label: 'Modify PCAP retention policies', module: 'Storage', admin: true, analyst: false, observer: false },
+    {
+      code: 'system:view',
+      label: 'Consulter l\'état système et les métriques de capture',
+      module: 'Système',
+      admin: true,
+      analyst: true,
+      observer: true,
+    },
+    {
+      code: 'system:manage',
+      label: 'Administrer les services et paramètres plateforme',
+      module: 'Système',
+      admin: true,
+      analyst: false,
+      observer: false,
+    },
+    {
+      code: 'interfaces:view',
+      label: 'Consulter la configuration et la conformité réseau',
+      module: 'Réseau',
+      admin: true,
+      analyst: true,
+      observer: true,
+    },
+    {
+      code: 'interfaces:manage',
+      label: 'Piloter la capture et analyser des fichiers PCAP',
+      module: 'Réseau',
+      admin: true,
+      analyst: false,
+      observer: false,
+    },
+    {
+      code: 'users:view',
+      label: 'Consulter l\'annuaire des comptes et des rôles',
+      module: 'Utilisateurs',
+      admin: true,
+      analyst: true,
+      observer: false,
+    },
+    {
+      code: 'users:manage',
+      label: 'Créer, activer ou désactiver des comptes utilisateurs',
+      module: 'Utilisateurs',
+      admin: true,
+      analyst: false,
+      observer: false,
+    },
+    {
+      code: 'audit:view',
+      label: 'Consulter le journal d\'audit de sécurité',
+      module: 'Audit',
+      admin: true,
+      analyst: true,
+      observer: false,
+    },
+    {
+      code: 'storage:manage',
+      label: 'Modifier les politiques de rétention PCAP',
+      module: 'Stockage',
+      admin: true,
+      analyst: false,
+      observer: false,
+    },
   ];
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    if (!newEmail.trim() || !newFullName.trim()) {
+      setErrorMsg('Veuillez renseigner l\'adresse e-mail et le nom complet.');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      if (!newEmail || !newFullName) {
-        throw new Error('Please fill in all required fields.');
-      }
       const res = await onCreateUser({
         email: newEmail.trim(),
         fullName: newFullName.trim(),
@@ -87,239 +196,288 @@ export const RbacView: React.FC<RbacViewProps> = ({
         });
       }
     } catch (err: unknown) {
-      if (err instanceof Error) setErrorMsg(err.message);
+      setErrorMsg(err instanceof Error ? err.message : 'Erreur lors de la création du compte.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmToggle = async () => {
+    if (!pendingToggleUser) return;
+    setIsToggling(true);
+    try {
+      await onToggleUserActive(pendingToggleUser.id);
+    } finally {
+      setIsToggling(false);
+      setPendingToggleUser(null);
     }
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard?.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <span>Role-Based Access Control (RBAC)</span>
-              <HelpTooltip title="Role-Based Access Control" description="Controls who can inspect telemetry, run captures, read audit logs, or manage other accounts." />
-            </h2>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Strict privilege separation: Administrator, Analyst, and Observer.
-              All permissions are enforced server-side in PostgreSQL on every API request.
-            </p>
-          </div>
-          {canManageUsers && (
+    <PageContainer>
+      <PageHeader
+        title="Utilisateurs et rôles"
+        description="Gestion des comptes d'accès et matrice des autorisations RBAC vérifiée côté serveur."
+        actions={
+          canManageUsers && (
             <button
               type="button"
-              onClick={() => setIsModalOpen(true)}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap shrink-0"
+              onClick={() => {
+                setErrorMsg(null);
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              Create Account
+              <span>Créer un compte</span>
             </button>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
-      {/* One-time Temporary Password Alert */}
+      {error && <ErrorState message={error} onRetry={onRetry} />}
+
+      {/* One-time temporary password banner */}
       {createdCredentials && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-500/50 rounded-xl space-y-2 text-xs">
-          <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-semibold">
-            <span>Account successfully created in PostgreSQL!</span>
+        <div
+          role="status"
+          className="p-4 rounded-lg border border-emerald-200 dark:border-emerald-800/70 bg-emerald-50 dark:bg-emerald-950/40 space-y-2 text-xs"
+        >
+          <div className="flex items-center justify-between text-emerald-900 dark:text-emerald-200 font-semibold">
+            <span>Compte créé avec succès</span>
             <button
               type="button"
               onClick={() => setCreatedCredentials(null)}
-              className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              aria-label="Fermer l'alerte de mot de passe temporaire"
+              className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 p-1"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-slate-700 dark:text-slate-300">
-            A one-time temporary password has been generated for{' '}
-            <strong className="text-slate-900 dark:text-white font-mono">{createdCredentials.email}</strong>.
-            This password will never be shown again:
+          <p className="text-gray-700 dark:text-gray-300">
+            Un mot de passe temporaire à usage unique a été généré pour{' '}
+            <strong className="font-mono text-gray-900 dark:text-gray-100">
+              {createdCredentials.email}
+            </strong>
+            . Copiez-le maintenant : il ne sera plus affiché après fermeture.
           </p>
-          <div className="flex items-center gap-2 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded font-mono text-emerald-700 dark:text-emerald-400">
+          <div className="flex items-center gap-2 p-2.5 bg-white dark:bg-[#111318] border border-gray-200 dark:border-[#2c313a] rounded-md font-mono text-gray-900 dark:text-gray-100">
             <span className="flex-1 font-semibold select-all">{createdCredentials.tempPass}</span>
             <button
               type="button"
               onClick={() => copyToClipboard(createdCredentials.tempPass)}
-              className="p-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 rounded"
-              title="Copy password"
+              className="p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 rounded border border-gray-200 dark:border-[#2c313a]"
+              title="Copier le mot de passe temporaire"
             >
-              {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+              {copied ? <CheckCheck className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
         </div>
       )}
 
-      {/* Users Directory Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-emerald-500" />
-            <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200">Sensor User Directory</h3>
-            <HelpTooltip title="User Accounts" description="Lists registered SOC operators, their assigned role, last sign-in timestamp, and active/disabled status." />
-          </div>
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{users.length} active records</span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-950/60 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+      {/* Annuaire des comptes */}
+      <SectionCard
+        title={
+          <>
+            <span>Annuaire des utilisateurs</span>
+            <HelpTooltip
+              title="Comptes enregistrés"
+              description="Liste réelle des opérateurs enregistrés sur le serveur, leur rôle et leur état d'activation."
+            />
+          </>
+        }
+        description="Les privilèges sont contrôlés côté backend sur chaque route API."
+        actions={
+          hasViewPermission && (
+            <span className="text-xs font-mono text-gray-500 dark:text-gray-400 tabular-nums">
+              {users.length} compte(s)
+            </span>
+          )
+        }
+        noPadding
+      >
+        {!hasViewPermission ? (
+          <EmptyState
+            title="Accès restreint"
+            description="Votre compte actuel ne dispose pas du privilège users:view requis pour consulter l'annuaire des utilisateurs."
+          />
+        ) : isLoading && users.length === 0 ? (
+          <LoadingState message="Chargement de l'annuaire des utilisateurs..." />
+        ) : users.length === 0 ? (
+          <EmptyState
+            title="Aucun utilisateur retourné"
+            description="Aucun compte n'a été remonté par le serveur."
+          />
+        ) : (
+          <DataTable>
+            <thead className="bg-gray-50 dark:bg-[#111318] text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-[#2c313a]">
               <tr>
-                <th className="px-4 py-3 font-medium">Name &amp; Identifier</th>
-                <th className="px-4 py-3 font-medium">Assigned Role</th>
-                <th className="px-4 py-3 font-medium">Last Login</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+                <th className="px-4 py-3 font-medium">Nom et identifiant</th>
+                <th className="px-4 py-3 font-medium">Rôle</th>
+                <th className="px-4 py-3 font-medium">Dernière connexion</th>
+                <th className="px-4 py-3 font-medium">Statut</th>
+                <th className="px-4 py-3 font-medium text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
-              {users.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
-                    Sign in with <strong>users:view</strong> permission to inspect user accounts.
-                  </td>
-                </tr>
-              ) : (
-                users.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+            <tbody className="divide-y divide-gray-200 dark:divide-[#2c313a]">
+              {users.map((user) => {
+                const isSelf =
+                  currentUserEmail &&
+                  user.email.toLowerCase() === currentUserEmail.toLowerCase();
+
+                return (
+                  <tr
+                    key={user.id}
+                    className="hover:bg-gray-50 dark:hover:bg-[#1f2329] transition-colors"
+                  >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900 dark:text-slate-200">{user.fullName}</div>
-                      <div className="font-mono text-slate-500 dark:text-slate-400">{user.email}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {user.fullName}
+                      </div>
+                      <div className="font-mono text-gray-500 dark:text-gray-400">
+                        {user.email}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center gap-1 font-mono px-2 py-0.5 rounded text-xs ${
-                          user.role === 'Administrator'
-                            ? 'bg-rose-50 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40'
-                            : user.role === 'Analyst'
-                            ? 'bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
-                            : 'bg-sky-50 dark:bg-blue-950/80 text-sky-700 dark:text-blue-300 border border-sky-200 dark:border-blue-800/40'
-                        }`}
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-xs font-medium ${ROLE_BADGE_CLASSES[user.role]}`}
                       >
-                        <Shield className="w-3 h-3" />
-                        {user.role}
+                        <Shield className="w-3 h-3 shrink-0" />
+                        <span>{ROLE_LABELS[user.role]}</span>
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-400 tabular-nums">
-                      {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString('en-US') : 'Never'}
+                    <td className="px-4 py-3 font-mono text-gray-600 dark:text-gray-400 tabular-nums">
+                      {user.lastLoginAt
+                        ? new Date(user.lastLoginAt).toLocaleString('fr-FR')
+                        : 'Jamais connecté'}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          user.isActive
-                            ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/40'
-                            : 'text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800'
-                        }`}
-                      >
-                        {user.isActive ? 'Active' : 'Disabled'}
-                      </span>
+                      <StatusBadge
+                        state={user.isActive ? 'operational' : 'stopped'}
+                        label={user.isActive ? 'Actif' : 'Désactivé'}
+                      />
                     </td>
                     <td className="px-4 py-3 text-right">
                       {canManageUsers ? (
                         <button
                           type="button"
-                          onClick={() => onToggleUserActive(user.id)}
-                          className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 underline font-medium"
+                          onClick={() => setPendingToggleUser(user)}
+                          className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
                         >
-                          {user.isActive ? 'Disable' : 'Re-enable'}
+                          {user.isActive ? 'Désactiver' : 'Réactiver'}
+                          {isSelf ? ' (session actuelle)' : ''}
                         </button>
                       ) : (
-                        <span className="text-slate-400 dark:text-slate-600 text-xs">—</span>
+                        <span className="text-gray-400 dark:text-gray-600">—</span>
                       )}
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })}
             </tbody>
-          </table>
-        </div>
-      </div>
+          </DataTable>
+        )}
+      </SectionCard>
 
-      {/* Permissions Matrix */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800">
-          <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-200 flex items-center gap-1.5">
-            <span>Official RBAC Privileges Matrix</span>
-            <HelpTooltip title="Permission Matrix" description="Reference chart showing which server permissions are included in each of the three fixed roles." />
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Access rights per role according to platform security specifications
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-950/60 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="px-4 py-3 font-medium">Permission Code</th>
-                <th className="px-4 py-3 font-medium">Module</th>
-                <th className="px-4 py-3 font-medium">Description</th>
-                <th className="px-4 py-3 font-medium text-center">Administrator</th>
-                <th className="px-4 py-3 font-medium text-center">Analyst</th>
-                <th className="px-4 py-3 font-medium text-center">Observer</th>
+      {/* Matrice des autorisations */}
+      <SectionCard
+        title={
+          <>
+            <span>Matrice des autorisations par rôle</span>
+            <HelpTooltip
+              title="Référence des permissions"
+              description="Tableau de référence indiquant les droits associés aux trois rôles prédéfinis de la plateforme."
+            />
+          </>
+        }
+        description="Répartition fixe des privilèges appliquée par le contrôleur d'accès."
+        noPadding
+      >
+        <DataTable>
+          <thead className="bg-gray-50 dark:bg-[#111318] text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-[#2c313a]">
+            <tr>
+              <th className="px-4 py-3 font-medium">Permission</th>
+              <th className="px-4 py-3 font-medium">Domaine</th>
+              <th className="px-4 py-3 font-medium">Description</th>
+              <th className="px-4 py-3 font-medium text-center">Administrateur</th>
+              <th className="px-4 py-3 font-medium text-center">Analyste</th>
+              <th className="px-4 py-3 font-medium text-center">Observateur</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-[#2c313a]">
+            {permissionMatrix.map((item) => (
+              <tr key={item.code} className="hover:bg-gray-50 dark:hover:bg-[#1f2329]">
+                <td className="px-4 py-2.5 font-mono text-gray-900 dark:text-gray-100">
+                  {item.code}
+                </td>
+                <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{item.module}</td>
+                <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300">{item.label}</td>
+                <td className="px-4 py-2.5 text-center">
+                  {item.admin ? (
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
+                  ) : (
+                    <Minus className="w-4 h-4 text-gray-300 dark:text-gray-600 mx-auto" />
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {item.analyst ? (
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
+                  ) : (
+                    <Minus className="w-4 h-4 text-gray-300 dark:text-gray-600 mx-auto" />
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {item.observer ? (
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
+                  ) : (
+                    <Minus className="w-4 h-4 text-gray-300 dark:text-gray-600 mx-auto" />
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
-              {permissionMatrix.map((item) => (
-                <tr key={item.code} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-4 py-2.5 font-mono text-emerald-700 dark:text-emerald-400">{item.code}</td>
-                  <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{item.module}</td>
-                  <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{item.label}</td>
-                  <td className="px-4 py-2.5 text-center">
-                    {item.admin ? (
-                      <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
-                    ) : (
-                      <X className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    {item.analyst ? (
-                      <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
-                    ) : (
-                      <X className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    {item.observer ? (
-                      <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
-                    ) : (
-                      <X className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            ))}
+          </tbody>
+        </DataTable>
+      </SectionCard>
 
-      {/* Create User Modal */}
+      {/* Modale création utilisateur */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-emerald-500" />
-                New User Account
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-user-title"
+        >
+          <div className="bg-white dark:bg-[#181b20] border border-gray-200 dark:border-[#2c313a] rounded-lg max-w-md w-full p-6 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-[#2c313a]">
+              <h3
+                id="create-user-title"
+                className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"
+              >
+                <UserPlus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>Nouveau compte utilisateur</span>
               </h3>
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                aria-label="Fermer le formulaire de création"
+                className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {errorMsg && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-lg flex items-center gap-2">
+              <div
+                role="alert"
+                className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-red-800 dark:text-red-300 text-xs rounded-md flex items-center gap-2"
+              >
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
@@ -327,92 +485,146 @@ export const RbacView: React.FC<RbacViewProps> = ({
 
             <form onSubmit={handleCreate} className="space-y-4 text-xs">
               <div>
-                <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 mb-1 font-medium">
-                  <span>Email Address</span>
-                  <HelpTooltip title="User Login Email" description="Unique identifier used by the new user to sign into OpenNDR." align="left" />
+                <label
+                  htmlFor="rbac-new-email"
+                  className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 mb-1.5 font-medium"
+                >
+                  <span>Adresse e-mail</span>
+                  <HelpTooltip
+                    title="Identifiant de connexion"
+                    description="Adresse utilisée par l'opérateur pour s'authentifier auprès de l'API."
+                    align="left"
+                  />
                 </label>
                 <input
-                  type="text"
+                  id="rbac-new-email"
+                  type="email"
                   required
-                  placeholder="analyst@openndr.local"
+                  placeholder="operateur@domaine.local"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-gray-300 dark:border-[#2c313a] rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 font-mono text-xs"
                 />
               </div>
 
               <div>
-                <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 mb-1 font-medium">
-                  <span>Full Name</span>
-                  <HelpTooltip title="Operator Display Name" description="Human-readable name displayed in audit logs and the user directory." align="left" />
+                <label
+                  htmlFor="rbac-new-name"
+                  className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 mb-1.5 font-medium"
+                >
+                  <span>Nom complet</span>
+                  <HelpTooltip
+                    title="Nom affiché"
+                    description="Nom lisible apparaissant dans l'annuaire et dans le journal d'audit."
+                    align="left"
+                  />
                 </label>
                 <input
+                  id="rbac-new-name"
                   type="text"
                   required
-                  placeholder="e.g. Jane Doe (SOC Analyst)"
+                  placeholder="Ex. Camille Martin (Analyste SOC)"
                   value={newFullName}
                   onChange={(e) => setNewFullName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 text-xs"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-gray-300 dark:border-[#2c313a] rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 text-xs"
                 />
               </div>
 
               <div>
-                <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 mb-1 font-medium">
-                  <span>Role &amp; Privilege Level</span>
-                  <HelpTooltip title="Role Selection" description="Administrator can manage all settings and users; Analyst investigates captures & audit logs; Observer has read-only visibility." align="left" />
+                <label
+                  htmlFor="rbac-new-role"
+                  className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 mb-1.5 font-medium"
+                >
+                  <span>Rôle et niveau de privilèges</span>
+                  <HelpTooltip
+                    title="Choix du rôle"
+                    description="Administrateur : gestion complète. Analyste : investigation et audit. Observateur : lecture seule."
+                    align="left"
+                  />
                 </label>
                 <select
+                  id="rbac-new-role"
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-gray-300 dark:border-[#2c313a] rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 text-xs"
                 >
-                  <option value="Administrator">Administrator (Full management)</option>
-                  <option value="Analyst">Analyst (Investigation &amp; Audit)</option>
-                  <option value="Observer">Observer (Read-only)</option>
+                  <option value="Administrator">Administrateur (Gestion complète)</option>
+                  <option value="Analyst">Analyste (Investigation et audit)</option>
+                  <option value="Observer">Observateur (Lecture seule)</option>
                 </select>
               </div>
 
               <div>
-                <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 mb-1 font-medium">
-                  <span>Password (optional)</span>
-                  <HelpTooltip title="Custom or Temporary Password" description="Leave empty to auto-generate a strong one-time temporary password, or enter a passphrase of at least 12 characters." align="left" />
+                <label
+                  htmlFor="rbac-new-password"
+                  className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 mb-1.5 font-medium"
+                >
+                  <span>Mot de passe (optionnel)</span>
+                  <HelpTooltip
+                    title="Mot de passe initial"
+                    description="Laissez vide pour générer automatiquement un mot de passe temporaire aléatoire, ou saisissez au moins 12 caractères."
+                    align="left"
+                  />
                 </label>
                 <input
+                  id="rbac-new-password"
                   type="password"
-                  placeholder="Min. 12 chars (or blank to auto-generate)"
+                  placeholder="Min. 12 caractères (ou laisser vide)"
                   value={customPassword}
                   onChange={(e) => setCustomPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#111318] border border-gray-300 dark:border-[#2c313a] rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 font-mono text-xs"
                 />
               </div>
 
-              <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                <Lock className="w-3.5 h-3.5 mt-0.5 text-emerald-500 shrink-0" />
+              <div className="p-3 bg-gray-50 dark:bg-[#111318] border border-gray-200 dark:border-[#2c313a] rounded-md text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                <Lock className="w-3.5 h-3.5 mt-0.5 text-blue-600 dark:text-blue-400 shrink-0" />
                 <span>
-                  Compliant Argon2id cryptographic hashing. If left blank, a strong temporary password
-                  will be generated and displayed once.
+                  Hachage Argon2id conforme. En l&apos;absence de saisie, un mot de passe temporaire
+                  robuste sera généré côté serveur et affiché une seule fois.
                 </span>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200 dark:border-[#2c313a]">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
+                  className="px-3.5 py-2 border border-gray-300 dark:border-[#2c313a] bg-white dark:bg-[#1f2329] hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-md transition-colors"
                 >
-                  Cancel
+                  Annuler
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors shadow-sm"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-md transition-colors"
                 >
-                  Create user
+                  {isSubmitting ? 'Création...' : 'Créer le compte'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+
+      {/* Confirmation désactivation / réactivation */}
+      <ConfirmDialog
+        isOpen={Boolean(pendingToggleUser)}
+        title={
+          pendingToggleUser?.isActive
+            ? 'Désactiver le compte utilisateur ?'
+            : 'Réactiver le compte utilisateur ?'
+        }
+        message={
+          pendingToggleUser?.isActive
+            ? `L'utilisateur ${pendingToggleUser.email} ne pourra plus se connecter tant que son compte restera désactivé.`
+            : `L'utilisateur ${pendingToggleUser?.email} retrouvera ses droits d'accès selon le rôle ${pendingToggleUser ? ROLE_LABELS[pendingToggleUser.role] : ''}.`
+        }
+        confirmLabel={pendingToggleUser?.isActive ? 'Désactiver' : 'Réactiver'}
+        variant={pendingToggleUser?.isActive ? 'danger' : 'primary'}
+        isBusy={isToggling}
+        onConfirm={handleConfirmToggle}
+        onCancel={() => setPendingToggleUser(null)}
+      />
+    </PageContainer>
   );
 };

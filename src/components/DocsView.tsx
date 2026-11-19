@@ -1,351 +1,332 @@
 import React, { useState } from 'react';
 import {
-  Milestone,
   CheckCircle2,
   Clock,
+  Info,
 } from 'lucide-react';
-import { HelpTooltip } from './HelpTooltip';
+import { PageContainer, PageHeader, SectionCard } from './ui';
+
+type DocSection = 'arch' | 'adr' | 'install' | 'specs' | 'roadmap';
+
+const DOC_NAV: { id: DocSection; label: string }[] = [
+  { id: 'arch', label: 'Vue d\'architecture' },
+  { id: 'adr', label: 'Décisions d\'architecture (ADR)' },
+  { id: 'install', label: 'Installation Debian 13' },
+  { id: 'specs', label: 'Référence API REST' },
+  { id: 'roadmap', label: 'Feuille de route produit' },
+];
 
 export const DocsView: React.FC = () => {
-  const [activeDoc, setActiveDoc] = useState<'adr' | 'install' | 'specs' | 'roadmap'>('roadmap');
+  const [activeDoc, setActiveDoc] = useState<DocSection>('arch');
 
   const roadmapMilestones = [
     {
       version: 'V0.1',
-      title: 'Technical Foundations & Architecture',
-      status: 'COMPLETED',
+      title: 'Fondations techniques et sécurité',
+      status: 'IMPLÉMENTÉ',
       completed: true,
       points: [
-        '3-tier modular architecture (Rust Engine, FastAPI Backend, React Web UI)',
-        'Server-enforced RBAC access control (Administrator, Analyst, Observer)',
-        'Strict network interface separation (eth0 admin vs eth1 passive capture)',
-        'PostgreSQL schemas and initial Alembic migrations',
-        'Debian 13 systemd units and install/uninstall scripts',
+        'Architecture 3 tiers modulaire (moteur Rust, backend FastAPI, console React)',
+        'Contrôle d\'accès RBAC vérifié côté serveur (Administrateur, Analyste, Observateur)',
+        'Séparation stricte entre l\'interface d\'administration et l\'interface de capture passive',
+        'Schémas PostgreSQL, révocation JWT persistante et migrations Alembic',
+        'Unités systemd et scripts d\'installation natifs Debian 13',
       ],
     },
     {
       version: 'V0.2',
-      title: 'Packet Capture & Decoding',
-      status: 'COMPLETED',
+      title: 'Capture réseau et décodage L2–L4',
+      status: 'IMPLÉMENTÉ',
       completed: true,
       points: [
-        'Real-time passive AF_PACKET capture (PACKET_MMAP TPACKET_V2 ring buffer) & libpcap compatibility',
-        'PCAP / PCAPNG trace ingestion and decoding',
-        'Hierarchical L2–L4 decoding: Ethernet II, 802.1Q VLAN, ARP, IPv4, IPv6, ICMP, TCP, UDP',
-        'Local rotating PCAP writer and interactive Web packet explorer',
+        'Capture passive AF_PACKET (PACKET_MMAP TPACKET_V2) et compatibilité libpcap',
+        'Ingestion et analyse de traces PCAP / PCAPNG',
+        'Décodage hiérarchique L2–L4 : Ethernet II, VLAN 802.1Q, ARP, IPv4, IPv6, ICMP, TCP, UDP',
+        'Écriture rotative locale des fichiers PCAP et explorateur de paquets',
       ],
     },
     {
       version: 'V0.3',
-      title: 'Flows & Protocols',
-      status: 'NEXT MILESTONE',
+      title: 'Flux et analyse protocolaire',
+      status: 'PLANIFIÉ',
       completed: false,
       points: [
-        'TCP/UDP stream reconstruction and session state tracking',
-        'Protocol parsers: DNS, DHCP, HTTP, TLS metadata (SNI/JA3), SSH',
-        'Bounded memory management for active network sessions',
+        'Reconstruction de flux TCP/UDP et suivi d\'état des sessions',
+        'Parseurs applicatifs : DNS, DHCP, HTTP, métadonnées TLS (SNI/JA3), SSH',
+        'Gestion mémoire bornée des sessions réseau actives',
       ],
     },
     {
       version: 'V0.4',
-      title: 'Autonomous Detection Engine',
-      status: 'PLANNED',
+      title: 'Moteur de détection autonome',
+      status: 'PLANIFIÉ',
       completed: false,
       points: [
-        'Signature and network pattern detection rule engine',
-        'Behavioral & threshold-based detection (port scans, sweeps, DNS tunneling)',
-        'Security alerting system with explainable technical evidence',
+        'Moteur de règles de signatures et détection comportementale',
+        'Détection par seuils (scans de ports, balayages, tunneling DNS)',
+        'Génération d\'alertes de sécurité accompagnées de preuves techniques',
       ],
     },
     {
       version: 'V0.5',
-      title: 'Correlation & Incident Management',
-      status: 'PLANNED',
+      title: 'Corrélation et gestion des incidents',
+      status: 'PLANIFIÉ',
       completed: false,
       points: [
-        'Multi-source temporal alert correlation engine',
-        'Security incident cases, timelines, and investigation notes',
-        'Alert deduplication and noise reduction',
+        'Moteur de corrélation temporelle multi-sources',
+        'Dossiers d\'incidents de sécurité et chronologie d\'investigation',
+        'Déduplication et réduction du bruit opérationnel',
       ],
     },
     {
       version: 'V1.0',
-      title: 'First Production-Stable Release',
-      status: 'FINAL TARGET',
+      title: 'Première version de production stable',
+      status: 'CIBLE',
       completed: false,
       points: [
-        'Fully sovereign NDR platform with zero mandatory third-party dependencies',
-        'Full Debian packaging, 100+ Mbps load testing, and security audits',
+        'Plateforme NDR autonome sans dépendance cloud obligatoire',
+        'Empaquetage Debian complet, essais de charge et audits de sécurité',
       ],
     },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <span>Technical Documentation &amp; Roadmap</span>
-              <HelpTooltip title="Embedded Documentation" description="Offline reference manuals built directly into the console covering the roadmap, architecture decisions, Debian install steps, and API routes." />
-            </h2>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Browse technical specifications, Architecture Decision Records (ADRs), and operations guides
-              embedded directly within the OpenNDR platform.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveDoc('roadmap')}
-              className={`px-3 py-1.5 rounded transition-colors ${
-                activeDoc === 'roadmap' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
+    <PageContainer>
+      <PageHeader
+        title="Documentation"
+        description="Référentiels d'architecture, guides d'installation Debian 13, contrats API et documentation produit."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        {/* Menu de documentation */}
+        <SectionCard title="Sommaire" noPadding>
+          <nav aria-label="Sections de documentation" className="p-2 space-y-0.5">
+            {DOC_NAV.map((item) => {
+              const active = activeDoc === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveDoc(item.id)}
+                  className={`w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                    active
+                      ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1f2329]'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </SectionCard>
+
+        {/* Contenu documentaire */}
+        <div className="lg:col-span-3 space-y-6">
+          {activeDoc === 'arch' && (
+            <SectionCard
+              title="Architecture logicielle OpenNDR"
+              description="Séparation stricte entre plan d'analyse, plan d'orchestration et interface web"
             >
-              Roadmap (V0.1 - V1.0)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDoc('adr')}
-              className={`px-3 py-1.5 rounded transition-colors ${
-                activeDoc === 'adr' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
+              <div className="space-y-4 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                <p>
+                  OpenNDR repose sur trois composants distincts conçus pour fonctionner nativement
+                  sous Debian 13 (Trixie) sans dépendance à des services cloud externes :
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">
+                      1. Moteur de capture Rust
+                    </div>
+                    <p className="mt-1 text-gray-600 dark:text-gray-400">
+                      Capture passive AF_PACKET/PACKET_MMAP sur port SPAN/TAP, décodage L2–L4 et
+                      ingestion PCAP/PCAPNG.
+                    </p>
+                  </div>
+                  <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">
+                      2. Backend d&apos;administration FastAPI
+                    </div>
+                    <p className="mt-1 text-gray-600 dark:text-gray-400">
+                      API REST <span className="font-mono">/api/v1</span>, authentification JWT avec
+                      révocation persistante PostgreSQL et journal d&apos;audit immuable.
+                    </p>
+                  </div>
+                  <div className="p-3.5 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]">
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">
+                      3. Console d&apos;administration Web
+                    </div>
+                    <p className="mt-1 text-gray-600 dark:text-gray-400">
+                      Interface de supervision affichant uniquement l&apos;état réel remonté par les
+                      services et les endpoints API.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
+          {activeDoc === 'adr' && (
+            <div className="space-y-4">
+              <SectionCard
+                title="ADR-001 · Choix de Rust pour le moteur d'analyse réseau"
+                actions={<span className="font-mono text-xs text-gray-500">Accepté</span>}
+              >
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Tous les décodeurs de paquets et l&apos;ingestion PCAP sont implémentés en Rust afin
+                  d&apos;éliminer les vulnérabilités mémoire lors du traitement de trafic non fiable,
+                  tout en conservant des performances prévisibles sans ramasse-miettes.
+                </p>
+              </SectionCard>
+
+              <SectionCard
+                title="ADR-002 · Backend d'orchestration FastAPI et PostgreSQL"
+                actions={<span className="font-mono text-xs text-gray-500">Accepté</span>}
+              >
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Le service FastAPI gère l&apos;API REST, l&apos;authentification, le RBAC et la
+                  traçabilité d&apos;audit. Il ne réalise aucune capture brute dans les workers HTTP et
+                  pilote le moteur natif via un canal UNIX local dédié.
+                </p>
+              </SectionCard>
+
+              <SectionCard
+                title="ADR-003 · Séparation stricte des interfaces d'administration et de capture"
+                actions={<span className="font-mono text-xs text-gray-500">Accepté</span>}
+              >
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  La plateforme impose une séparation claire entre l&apos;interface d&apos;administration
+                  (dotée d&apos;une adresse IP pour la console et l&apos;API) et l&apos;interface de capture
+                  passive raccordée au port miroir (sans adresse IP ni routage sortant).
+                </p>
+              </SectionCard>
+            </div>
+          )}
+
+          {activeDoc === 'install' && (
+            <SectionCard
+              title="Procédure d'installation sous Debian 13 (Trixie)"
+              description="Déploiement natif géré par systemd"
             >
-              ADR Decisions
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDoc('install')}
-              className={`px-3 py-1.5 rounded transition-colors ${
-                activeDoc === 'install' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
+              <div className="space-y-4 text-xs">
+                <p className="text-gray-600 dark:text-gray-400">
+                  Exécutez les commandes suivantes avec les privilèges administrateur sur un hôte Debian 13 :
+                </p>
+                <div className="font-mono bg-gray-50 dark:bg-[#111318] p-4 rounded-md border border-gray-200 dark:border-[#2c313a] space-y-2 text-gray-800 dark:text-gray-200 overflow-x-auto">
+                  <div className="text-gray-500"># 1. Vérifier les prérequis système (CPU, RAM, interfaces)</div>
+                  <div>sudo bash deployment/debian/check-prerequisites.sh</div>
+                  <div className="text-gray-500 pt-2"># 2. Exécuter l&apos;installation native</div>
+                  <div>sudo bash deployment/debian/install.sh</div>
+                  <div className="text-gray-500 pt-2"># 3. Activer et démarrer les services systemd</div>
+                  <div>sudo systemctl enable --now openndr-backend openndr-engine openndr-web</div>
+                  <div className="text-gray-500 pt-2"># 4. Contrôler l&apos;état de santé de l&apos;API</div>
+                  <div>curl -s http://127.0.0.1:8000/api/v1/health</div>
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
+          {activeDoc === 'specs' && (
+            <SectionCard
+              title="Contrat d'interface REST /api/v1"
+              description="Endpoints HTTP exposés par le backend"
+              noPadding
             >
-              Debian 13 Setup
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDoc('specs')}
-              className={`px-3 py-1.5 rounded transition-colors ${
-                activeDoc === 'specs' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
+              <div className="divide-y divide-gray-200 dark:divide-[#2c313a] font-mono text-xs">
+                {[
+                  ['GET', '/api/v1/health', 'Public · Santé globale de la plateforme et du moteur'],
+                  ['POST', '/api/v1/auth/login', 'Public · Authentification Argon2id / émission JWT'],
+                  ['GET', '/api/v1/auth/me', 'Authentifié · Profil utilisateur et permissions'],
+                  ['GET', '/api/v1/system/status', 'system:view · État des services et télémétrie'],
+                  ['GET', '/api/v1/system/capture/telemetry', 'system:view · Débit, pertes et compteurs L2–L4'],
+                  ['POST', '/api/v1/system/capture/start | stop', 'interfaces:manage · Démarrage / arrêt capture'],
+                  ['POST', '/api/v1/system/capture/ingest-pcap | upload-pcap', 'interfaces:manage · Analyse de fichier PCAP'],
+                  ['GET', '/api/v1/system/interfaces/isolation-check', 'interfaces:view · Vérification d\'isolation passive'],
+                  ['GET', '/api/v1/system/updates', 'État de version et planification des mises à jour'],
+                  ['GET', '/api/v1/system/audit', 'audit:view · Journal d\'audit horodaté'],
+                ].map(([method, route, desc]) => (
+                  <div
+                    key={route}
+                    className="px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className={`font-bold ${
+                          method === 'GET'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-blue-700 dark:text-blue-400'
+                        }`}
+                      >
+                        {method}
+                      </span>
+                      <span className="text-gray-900 dark:text-gray-100">{route}</span>
+                    </div>
+                    <span className="font-sans text-gray-500 dark:text-gray-400">{desc}</span>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {activeDoc === 'roadmap' && (
+            <SectionCard
+              title="Feuille de route produit (documentation indicative)"
+              description="Jalons fonctionnels prévus entre la V0.1 et la V1.0"
             >
-              Specs &amp; API
-            </button>
-          </div>
+              <div className="mb-4 p-3 rounded-md border border-blue-200 dark:border-blue-800/60 bg-blue-50/70 dark:bg-blue-950/30 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
+                <Info className="w-4 h-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                <span>
+                  Cette section présente la documentation produit indicative des jalons OpenNDR ; elle ne
+                  constitue pas une mesure d&apos;état temps réel du capteur.
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {roadmapMilestones.map((m) => (
+                  <div
+                    key={m.version}
+                    className="p-4 rounded-md border border-gray-200 dark:border-[#2c313a] bg-gray-50 dark:bg-[#111318]"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono text-xs font-bold text-gray-900 dark:text-gray-100">
+                          {m.version}
+                        </span>
+                        <span className="text-gray-400">·</span>
+                        <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">
+                          {m.title}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                          m.completed
+                            ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        {m.status}
+                      </span>
+                    </div>
+
+                    <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                      {m.points.map((p, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          {m.completed ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          ) : (
+                            <Clock className="w-3.5 h-3.5 mt-0.5 text-gray-400 shrink-0" />
+                          )}
+                          <span>{p}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
         </div>
       </div>
-
-      {/* Doc Content Area */}
-      {activeDoc === 'roadmap' && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-6">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Milestone className="w-4 h-4 text-emerald-500" />
-              <span>Official OpenNDR Product Roadmap</span>
-              <HelpTooltip title="Milestone Progression" description="Shows completed releases (V0.1, V0.2) and upcoming releases (V0.3 to V1.0)." />
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-              Methodical milestone-driven evolution with strict acceptance criteria before each version transition.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {roadmapMilestones.map((m) => (
-              <div
-                key={m.version}
-                className={`p-4 rounded-xl border transition-colors ${
-                  m.completed
-                    ? 'bg-emerald-50/50 dark:bg-slate-950/70 border-emerald-500/40'
-                    : 'bg-slate-50 dark:bg-slate-950/40 border-slate-200 dark:border-slate-800/80'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{m.version}</span>
-                    <span className="text-xs text-slate-400">·</span>
-                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{m.title}</span>
-                  </div>
-
-                  <span
-                    className={`text-xs font-mono px-2 py-0.5 rounded font-medium ${
-                      m.completed
-                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40'
-                        : m.status === 'NEXT MILESTONE'
-                        ? 'bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-400 border border-sky-200 dark:border-sky-800/40'
-                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    {m.status}
-                  </span>
-                </div>
-
-                <ul className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-400">
-                  {m.points.map((p, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      {m.completed ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-500 shrink-0" />
-                      ) : (
-                        <Clock className="w-3.5 h-3.5 mt-0.5 text-slate-400 dark:text-slate-600 shrink-0" />
-                      )}
-                      <span>{p}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeDoc === 'adr' && (
-        <div className="space-y-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">ADR-001</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Accepted · 2026-11-06</span>
-            </div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Selection of Rust for the Network Analysis Engine
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong>Decision:</strong> Implement all packet decoders, flow state machines, and DPI in Rust.
-              Eliminates memory-corruption vulnerabilities (Buffer Overflows, Use-After-Free) that traditionally affect C/C++ decoders processing untrusted traffic, while maintaining equivalent throughput with no garbage collector.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-bold text-sky-600 dark:text-sky-400">ADR-002</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Accepted · 2026-11-06</span>
-            </div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              FastAPI &amp; SQLAlchemy Orchestration Backend
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong>Decision:</strong> Use FastAPI (Python 3.10+) for the management service, REST API, user lifecycle, and authentication.
-              The backend performs no packet capture within HTTP worker processes and communicates with the Rust engine strictly over a dedicated local UNIX socket.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-bold text-purple-600 dark:text-purple-400">ADR-003</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Accepted · 2026-11-06</span>
-            </div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Strict Separation Between Management and Capture Interfaces
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong>Decision:</strong> Enforce 2 distinct physical network interfaces. The passive interface connected to SPAN/TAP must have no IP address (0.0.0.0), no routing, and blocks all ARP replies or outbound packet transmission via kernel sysctl hardening.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {activeDoc === 'install' && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-            <span>Debian 13 (Trixie) Installation &amp; Deployment Guide</span>
-            <HelpTooltip title="Native Debian Commands" description="Run these four shell commands as root/sudo on a fresh Debian 13 server to install OpenNDR without Docker." />
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            OpenNDR is designed to run natively on Debian with no mandatory Docker dependency, managed by systemd.
-          </p>
-
-          <div className="space-y-3 font-mono text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="text-slate-500"># 1. Check system prerequisites (CPU, RAM, interfaces)</div>
-            <div className="text-emerald-700 dark:text-emerald-400">sudo bash deployment/debian/check-prerequisites.sh</div>
-
-            <div className="text-slate-500 pt-2"># 2. Run native installation script</div>
-            <div className="text-emerald-700 dark:text-emerald-400">sudo bash deployment/debian/install.sh</div>
-
-            <div className="text-slate-500 pt-2"># 3. Start systemd daemons</div>
-            <div className="text-emerald-700 dark:text-emerald-400">sudo systemctl enable --now openndr-backend openndr-engine openndr-web</div>
-
-            <div className="text-slate-500 pt-2"># 4. Verify platform health status</div>
-            <div className="text-emerald-700 dark:text-emerald-400">curl -s http://127.0.0.1:8000/api/v1/health | jq</div>
-          </div>
-        </div>
-      )}
-
-      {activeDoc === 'specs' && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-            <span>V0.2 REST API Endpoint Specification</span>
-            <HelpTooltip title="API Reference" description="HTTP routes exposed at /api/v1/* for SIEM integration, health checks, capture orchestration, and update checks." />
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            Standardized OpenAPI interface contracts for SIEM and SOC console integration.
-          </p>
-
-          <div className="divide-y divide-slate-200 dark:divide-slate-800 font-mono text-xs">
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/health</span>
-              </div>
-              <span className="text-slate-500">Public · Platform &amp; engine health check</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sky-600 dark:text-sky-400 font-bold">POST</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/auth/login</span>
-              </div>
-              <span className="text-slate-500">Public · Argon2/JWT authentication</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/auth/me</span>
-              </div>
-              <span className="text-slate-500">Bearer Auth · User profile</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/system/status</span>
-              </div>
-              <span className="text-slate-500">system:view · Services &amp; engine telemetry</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/system/capture/telemetry</span>
-              </div>
-              <span className="text-slate-500">system:view · Throughput, drops &amp; L2–L4 counters</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sky-600 dark:text-sky-400 font-bold">POST</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/system/capture/start | stop</span>
-              </div>
-              <span className="text-slate-500">interfaces:manage · AF_PACKET capture control</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sky-600 dark:text-sky-400 font-bold">POST</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/system/capture/ingest-pcap | upload-pcap</span>
-              </div>
-              <span className="text-slate-500">interfaces:manage · PCAP/PCAPNG trace decoding</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/system/updates</span>
-              </div>
-              <span className="text-slate-500">System release date, auto-update &amp; force sync</span>
-            </div>
-            <div className="py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span>
-                <span className="text-slate-900 dark:text-slate-200">/api/v1/system/audit</span>
-              </div>
-              <span className="text-slate-500">audit:view · Security audit log</span>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </PageContainer>
   );
 };
